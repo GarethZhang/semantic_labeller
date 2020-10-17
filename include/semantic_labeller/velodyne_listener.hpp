@@ -62,11 +62,11 @@ private:
     tf::StampedTransform kf_ref_to_velo_transform;
     uint32_t kf_ref_seq_, velo_seq_;
     uint64_t kf_ref_nsec_; // keep track of latest timestamp for submap
-    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref; // keep track of last submap
+    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map; // keep track of last submap
 
     // params config
     std::string save_dir;
-    std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic;
+    std::string submap_frame, submap_topic, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
     double max_distance;
 
@@ -78,9 +78,11 @@ private:
 
     void velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void slamMapCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
     void PointCloudXYZItoXYZ (const pcl::PointCloud<pcl::PointXYZI>& in,
                               pcl::PointCloud<pcl::PointXYZ>& out);
+
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match
