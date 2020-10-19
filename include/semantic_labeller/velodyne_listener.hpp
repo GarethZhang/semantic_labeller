@@ -23,6 +23,8 @@
 #include "pcl/io/ply_io.h"
 #include "pcl/registration/icp.h"
 #include "pcl/registration/correspondence_estimation.h"
+#include "pcl/registration/correspondence_estimation_backprojection.h"
+#include "pcl/features/normal_3d.h"
 #include "pcl_ros/transforms.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -51,9 +53,11 @@ private:
     // some objects to support subscriber, and publisher
 //    ros::Subscriber velo_sub_; //these will be set up within the class constructor, hiding these ugly details
     ros::Subscriber kf_ref_sub_; // subscribe to kf_ref topic
-    ros::Subscriber slam_map_sub_; // subscribe to kf_ref topic
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
+
+    message_filters::Subscriber<sensor_msgs::PointCloud2> velo_undistort_sub_; // subscribe to velodyne_points topic
+    message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_undistort_time_seq; //time sequencer
 
     std::ostringstream velo_ss_, kf_ref_ss_, velo_filtered_ss_;
     std::string velo_str_, kf_ref_str_, velo_filtere_str_;
@@ -77,6 +81,7 @@ private:
     void getParams();
 
     void velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void velodyneUndistortCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
 
     void PointCloudXYZItoXYZ (const pcl::PointCloud<pcl::PointXYZI>& in,

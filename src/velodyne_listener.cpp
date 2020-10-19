@@ -20,7 +20,9 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     last_kf_ref (new pcl::PointCloud<pcl::PointXYZI>),
     velo_sub_(nh_, "/velodyne_points", 10),
-    velo_time_seq(velo_sub_, ros::Duration(0.1), ros::Duration(0.01), 10)
+    velo_undistort_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 10),
+    velo_time_seq(velo_sub_, ros::Duration(0.1), ros::Duration(0.01), 10),
+    velo_undistort_time_seq(velo_undistort_sub_, ros::Duration(0.1), ros::Duration(0.01), 10)
     { // constructor
     ROS_INFO("in class constructor of velodyne_listener_class");
     getParams();
@@ -40,6 +42,7 @@ void velodyne_listener_class::initializeSubscribers() {
 //    velo_sub_ = nh_.subscribe("/velodyne_points", 1, &velodyne_listener_class::velodyneCallback, this);
     kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
     velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
+    velo_undistort_time_seq.registerCallback(&velodyne_listener_class::velodyneUndistortCallback, this);
 
     // add more subscribers here, as needed
 }
@@ -115,54 +118,142 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         }
     }
 
-    pcl_ros::transformPointCloud (*last_kf_ref, *point_cloud_out, kf_ref_to_velo_transform);
-    point_cloud_out->header.frame_id = velodyne_frame;
+    if (!last_kf_ref->empty()){
+        pcl_ros::transformPointCloud (*last_kf_ref, *point_cloud_out, kf_ref_to_velo_transform);
+        point_cloud_out->header.frame_id = velodyne_frame;
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
-    velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud, *cloud_in);
-    velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_out);
-    pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
-    est.setInputSource(cloud_in);
-    est.setInputTarget(cloud_out);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud, *cloud_in);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_out);
+        pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
+        est.setInputSource(cloud_in);
+        est.setInputTarget(cloud_out);
 
-    pcl::Correspondences all_correspondences;
-    est.determineCorrespondences(all_correspondences, max_distance);
+        pcl::Correspondences all_correspondences;
+        est.determineCorrespondences(all_correspondences, max_distance);
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointXYZ p;
-    int nr_correspondences = (int)all_correspondences.size();
-    int index_query;
-    for (int i = 0; i < nr_correspondences; ++i){
-        index_query = all_correspondences[i].index_query;
-        p.x = cloud_in->points[index_query].x;
-        p.y = cloud_in->points[index_query].y;
-        p.z = cloud_in->points[index_query].z;
-        cloud_filtered->push_back(p);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointXYZ p;
+        int nr_correspondences = (int)all_correspondences.size();
+        int index_query;
+        for (int i = 0; i < nr_correspondences; ++i){
+            index_query = all_correspondences[i].index_query;
+            p.x = cloud_in->points[index_query].x;
+            p.y = cloud_in->points[index_query].y;
+            p.z = cloud_in->points[index_query].z;
+            cloud_filtered->push_back(p);
+        }
+
+        // save out transformed point cloud named after the seq number
+        if (save_to_ply){
+            velo_seq_ = msg->header.seq;
+            velo_ss_.str(""); velo_ss_.clear();
+            velo_ss_ << save_dir << "velo_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            velo_str_ = velo_ss_.str();
+            ROS_INFO("SAVING VELO FILE");
+            pcl::io::savePLYFileBinary(velo_str_, *point_cloud);
+
+            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+            kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_to_" << velo_seq_ << "_" << kf_ref_nsec_ << ".ply";
+            kf_ref_str_ = kf_ref_ss_.str();
+            ROS_INFO("SAVING KF_REF FILE");
+            pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_out);
+
+            velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
+            velo_filtered_ss_ << save_dir << "velo_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            velo_filtere_str_ = velo_filtered_ss_.str();
+            ROS_INFO("SAVING VELO FILTERED FILE");
+            pcl::io::savePLYFileBinary(velo_filtere_str_, *cloud_filtered);
+        }
+    }
+    else{
+        ROS_INFO("SUBMAP EMPTY!");
+    }
+}
+// a simple callback function, used by the example subscriber.
+// note, though, use of member variables and access to pub_ (which is a member method)
+void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
+    // the real work is done in this callback function
+    // it wakes up every time a new message is published on "exampleMinimalSubTopic"
+
+    // initialize PCL point cloud (ROS)
+    auto *cloud = new pcl::PCLPointCloud2;
+    pcl::PCLPointCloud2ConstPtr cloudPtr(cloud);
+    pcl_conversions::toPCL(*msg, *cloud);
+
+    // initialize PCL point cloud (PCL)
+    pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::fromPCLPointCloud2(*cloud, *point_cloud);
+
+    // transform the point cloud when /tf becomes available
+    pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud_out (new pcl::PointCloud<pcl::PointXYZI>);
+
+    bool available = false;
+    while (!available){
+        try{
+            kf_ref_to_velo_listener.lookupTransform(velodyne_frame, submap_frame,
+                                                    ros::Time(0), kf_ref_to_velo_transform);
+            available = true;
+        }
+        catch (tf::TransformException ex){
+            ROS_ERROR("%s",ex.what());
+            ros::Duration(1.0).sleep();
+        }
     }
 
-    // save out transformed point cloud named after the seq number
-    if (save_to_ply){
-        velo_seq_ = msg->header.seq;
-        velo_ss_.str(""); velo_ss_.clear();
-        velo_ss_ << save_dir << "velo_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-        velo_str_ = velo_ss_.str();
-        ROS_INFO("SAVING VELO FILE");
-        pcl::io::savePLYFileBinary(velo_str_, *point_cloud);
+    if (!last_kf_ref->empty()){
+        pcl_ros::transformPointCloud (*last_kf_ref, *point_cloud_out, kf_ref_to_velo_transform);
+        point_cloud_out->header.frame_id = velodyne_frame;
 
-        kf_ref_ss_.str(""); kf_ref_ss_.clear();
-        kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_to_" << velo_seq_ << "_" << kf_ref_nsec_ << ".ply";
-        kf_ref_str_ = kf_ref_ss_.str();
-        ROS_INFO("SAVING KF_REF FILE");
-        pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_out);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud, *cloud_in);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_out);
+        pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
+        est.setInputSource(cloud_in);
+        est.setInputTarget(cloud_out);
 
-        velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
-        velo_filtered_ss_ << save_dir << "velo_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-        velo_filtere_str_ = velo_filtered_ss_.str();
-        ROS_INFO("SAVING VELO FILTERED FILE");
-        pcl::io::savePLYFileBinary(velo_filtere_str_, *cloud_filtered);
+        pcl::Correspondences all_correspondences;
+        est.determineCorrespondences(all_correspondences, max_distance);
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointXYZ p;
+        int nr_correspondences = (int)all_correspondences.size();
+        int index_query;
+        for (int i = 0; i < nr_correspondences; ++i){
+            index_query = all_correspondences[i].index_query;
+            p.x = cloud_in->points[index_query].x;
+            p.y = cloud_in->points[index_query].y;
+            p.z = cloud_in->points[index_query].z;
+            cloud_filtered->push_back(p);
+        }
+
+        // save out transformed point cloud named after the seq number
+        if (save_to_ply){
+            velo_seq_ = msg->header.seq;
+            velo_ss_.str(""); velo_ss_.clear();
+            velo_ss_ << save_dir << "velo_undistort_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            velo_str_ = velo_ss_.str();
+            ROS_INFO("SAVING VELO UNDISTORT FILE");
+            pcl::io::savePLYFileBinary(velo_str_, *point_cloud);
+
+//            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+//            kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_to_" << velo_seq_ << "_" << kf_ref_nsec_ << ".ply";
+//            kf_ref_str_ = kf_ref_ss_.str();
+//            ROS_INFO("SAVING KF_REF FILE");
+//            pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_out);
+
+            velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
+            velo_filtered_ss_ << save_dir << "velo_undistort_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            velo_filtere_str_ = velo_filtered_ss_.str();
+            ROS_INFO("SAVING VELO UNDISTORT FILTERED FILE");
+            pcl::io::savePLYFileBinary(velo_filtere_str_, *cloud_filtered);
+        }
     }
-
+    else{
+        ROS_INFO("SUBMAP EMPTY!");
+    }
 }
 
 void velodyne_listener_class::getParams() {

@@ -10,10 +10,10 @@
   <arg name="rviz" default="true"/>
   <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
 
-  <arg name="save_to_ply" default="false"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/results/"/>
+  <arg name="save_to_ply" default="true"/>
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/results-poor-submap-0.5-undistort-save-filter/"/>
 
-  <arg name="max_distance" default="1.0"/>
+  <arg name="max_distance" default="0.5"/>
 
   <!-- always make sure we are not using simulation time when running online-->
   <param unless="$(arg online)" name="/use_sim_time" value="true"/>
