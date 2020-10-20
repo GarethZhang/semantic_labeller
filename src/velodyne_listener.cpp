@@ -126,6 +126,8 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
         velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud, *cloud_in);
         velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_out);
+
+        // Determine correspondence based on proximity
         pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
         est.setInputSource(cloud_in);
         est.setInputTarget(cloud_out);
@@ -133,9 +135,55 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         pcl::Correspondences all_correspondences;
         est.determineCorrespondences(all_correspondences, max_distance);
 
+//        ////////////////////////////////////////////////////
+//        // Determine correspondence based on surface normals
+//        ////////////////////////////////////////////////////
+//
+//        // source point cloud normal estimation
+//        pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne_in;
+//        ne_in.setInputCloud (cloud_in);
+//        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_in (new pcl::search::KdTree<pcl::PointXYZ> ());
+//        ne_in.setSearchMethod (tree_in);
+//        pcl::PointCloud<pcl::Normal>::Ptr cloud_in_normals (new pcl::PointCloud<pcl::Normal>);
+//        ne_in.setRadiusSearch (radius_search_thresh);
+//        ne_in.compute (*cloud_in_normals);
+//
+//        // target point cloud normal estimation
+//        pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne_out;
+//        ne_out.setInputCloud (cloud_out);
+//        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_out (new pcl::search::KdTree<pcl::PointXYZ> ());
+//        ne_in.setSearchMethod (tree_out);
+//        pcl::PointCloud<pcl::Normal>::Ptr cloud_out_normals (new pcl::PointCloud<pcl::Normal>);
+//        ne_out.setRadiusSearch (radius_search_thresh);
+//        ne_out.compute (*cloud_out_normals);
+//
+////        // concatenate fields
+////        pcl::PointCloud<pcl::PointNormal>::Ptr cloud_in_point_normals (new pcl::PointCloud<pcl::PointNormal>);
+////        pcl::concatenateFields (*cloud_in, *cloud_in_normals, *cloud_in_point_normals);
+////        pcl::PointCloud<pcl::PointNormal>::Ptr cloud_out_point_normals (new pcl::PointCloud<pcl::PointNormal>);
+////        pcl::concatenateFields (*cloud_out, *cloud_out_normals, *cloud_out_point_normals);
+//
+//        // Check for outliers
+//        pcl::Correspondences remaining_correspondences;
+//        pcl::registration::CorrespondenceRejectorSurfaceNormal normal_rej;
+//        normal_rej.setThreshold(std::cos(ang_thresh / 180.0 * M_PI));
+//        normal_rej.initializeDataContainer<pcl::PointXYZ, pcl::Normal> ();
+//        normal_rej.setInputSource<pcl::PointXYZ> (cloud_in);
+//        normal_rej.setInputNormals<pcl::PointXYZ, pcl::Normal> (cloud_in_normals);
+//        normal_rej.setInputTarget<pcl::PointXYZ> (cloud_out);
+//        normal_rej.setTargetNormals<pcl::PointXYZ, pcl::Normal> (cloud_out_normals);
+//        pcl::CorrespondencesPtr input_correspondences(new pcl::Correspondences());
+//        for (auto & all_correspondence : all_correspondences){
+//            input_correspondences->push_back(all_correspondence);
+//        }
+//        normal_rej.setInputCorrespondences (input_correspondences);
+//        normal_rej.getCorrespondences (remaining_correspondences);
+
+        // cloud_normals->size () should have the same size as the input cloud->size ()*
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
         pcl::PointXYZ p;
         int nr_correspondences = (int)all_correspondences.size();
+//        ROS_INFO("VELO BEFORE: %lu AFTER: %d", input_correspondences->size(), nr_correspondences);
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
             index_query = all_correspondences[i].index_query;
@@ -217,9 +265,55 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         pcl::Correspondences all_correspondences;
         est.determineCorrespondences(all_correspondences, max_distance);
 
+//        ////////////////////////////////////////////////////
+//        // Determine correspondence based on surface normals
+//        ////////////////////////////////////////////////////
+//
+//        // source point cloud normal estimation
+//        pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne_in;
+//        ne_in.setInputCloud (cloud_in);
+//        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_in (new pcl::search::KdTree<pcl::PointXYZ> ());
+//        ne_in.setSearchMethod (tree_in);
+//        pcl::PointCloud<pcl::Normal>::Ptr cloud_in_normals (new pcl::PointCloud<pcl::Normal>);
+//        ne_in.setRadiusSearch (radius_search_thresh);
+//        ne_in.compute (*cloud_in_normals);
+//
+//        // target point cloud normal estimation
+//        pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne_out;
+//        ne_out.setInputCloud (cloud_out);
+//        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_out (new pcl::search::KdTree<pcl::PointXYZ> ());
+//        ne_in.setSearchMethod (tree_out);
+//        pcl::PointCloud<pcl::Normal>::Ptr cloud_out_normals (new pcl::PointCloud<pcl::Normal>);
+//        ne_out.setRadiusSearch (radius_search_thresh);
+//        ne_out.compute (*cloud_out_normals);
+//
+////        // concatenate fields
+////        pcl::PointCloud<pcl::PointNormal>::Ptr cloud_in_point_normals (new pcl::PointCloud<pcl::PointNormal>);
+////        pcl::concatenateFields (*cloud_in, *cloud_in_normals, *cloud_in_point_normals);
+////        pcl::PointCloud<pcl::PointNormal>::Ptr cloud_out_point_normals (new pcl::PointCloud<pcl::PointNormal>);
+////        pcl::concatenateFields (*cloud_out, *cloud_out_normals, *cloud_out_point_normals);
+//
+//        // Check for outliers
+//        pcl::Correspondences remaining_correspondences;
+//        pcl::registration::CorrespondenceRejectorSurfaceNormal normal_rej;
+//        normal_rej.setThreshold(std::cos(ang_thresh / 180.0 * M_PI));
+//        normal_rej.initializeDataContainer<pcl::PointXYZ, pcl::Normal> ();
+//        normal_rej.setInputSource<pcl::PointXYZ> (cloud_in);
+//        normal_rej.setInputNormals<pcl::PointXYZ, pcl::Normal> (cloud_in_normals);
+//        normal_rej.setInputTarget<pcl::PointXYZ> (cloud_out);
+//        normal_rej.setTargetNormals<pcl::PointXYZ, pcl::Normal> (cloud_out_normals);
+//        pcl::CorrespondencesPtr input_correspondences(new pcl::Correspondences());
+//        for (auto & all_correspondence : all_correspondences){
+//            input_correspondences->push_back(all_correspondence);
+//        }
+//        normal_rej.setInputCorrespondences (input_correspondences);
+//        normal_rej.getCorrespondences (remaining_correspondences);
+
+        // cloud_normals->size () should have the same size as the input cloud->size ()*
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
         pcl::PointXYZ p;
         int nr_correspondences = (int)all_correspondences.size();
+//        ROS_INFO("VELO UNDISTORT BEFORE: %lu AFTER: %d", input_correspondences->size(), nr_correspondences);
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
             index_query = all_correspondences[i].index_query;
@@ -261,6 +355,8 @@ void velodyne_listener_class::getParams() {
     nh_.param<bool>("save_to_ply", save_to_ply, true);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
+    nh_.param<double>("ang_thresh", ang_thresh, 1.0);
+    nh_.param<double>("radius_search_thresh", radius_search_thresh, 1.0);
 
     nh_.param<std::string>("submap_frame", submap_frame, "/kf_ref");
     nh_.param<std::string>("submap_topic", submap_topic, "/lidar_keyframe_slam/kfRef_cloud");

@@ -24,6 +24,8 @@
 #include "pcl/registration/icp.h"
 #include "pcl/registration/correspondence_estimation.h"
 #include "pcl/registration/correspondence_estimation_backprojection.h"
+#include "pcl/registration/correspondence_estimation_normal_shooting.h"
+#include "pcl/registration/correspondence_rejection_surface_normal.h"
 #include "pcl/features/normal_3d.h"
 #include "pcl_ros/transforms.h"
 #include "geometry_msgs/TransformStamped.h"
@@ -72,7 +74,7 @@ private:
     std::string save_dir;
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
-    double max_distance;
+    double max_distance, ang_thresh, radius_search_thresh;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
