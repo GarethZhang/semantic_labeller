@@ -53,24 +53,29 @@ private:
 
     // some objects to support subscriber, and publisher
 //    ros::Subscriber velo_sub_; //these will be set up within the class constructor, hiding these ugly details
-    ros::Subscriber kf_ref_sub_; // subscribe to kf_ref topic
-    ros::Subscriber slam_map_sub_; // subscribe to kf_ref topic
+    ros::Subscriber kf_ref_sub_, slam_map_sub_; // subscribe to kf_ref topic
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
+
+    message_filters::Subscriber<sensor_msgs::PointCloud2> velo_undistort_sub_; // subscribe to velodyne_points topic
+    message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_undistort_time_seq; //time sequencer
+
+    ros::Publisher velo_filtered_pub_, velo_undistort_filtered_pub_;
+    sensor_msgs::PointCloud2 velo_filtered_msg, velo_undistort_filtered_msg;
 
     std::ostringstream velo_ss_, kf_ref_ss_, velo_filtered_ss_;
     std::string velo_str_, kf_ref_str_, velo_filtere_str_;
 
-    tf::TransformListener kf_ref_to_velo_listener;
-    tf::StampedTransform kf_ref_to_velo_transform;
+    tf::TransformListener kf_ref_to_velo_listener, velo_to_map_listener, velo_undistort_to_map_listener;
+    tf::StampedTransform kf_ref_to_velo_transform, velo_to_map_transform, velo_undistort_to_map_transform;
     uint32_t kf_ref_seq_, velo_seq_;
     uint64_t kf_ref_nsec_; // keep track of latest timestamp for submap
-    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map; // keep track of last submap
+    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map, cur_sub_slam_map_undistort; // keep track of last submap
     pcl::KdTreeFLANN<pcl::PointXYZI> kdtree;
 
     // params config
     std::string save_dir;
-    std::string submap_frame, submap_topic, slamMap_topic, velodyne_frame, velodyne_topic;
+    std::string submap_frame, submap_topic, slamMap_frame, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
     double max_distance;
 
@@ -81,6 +86,7 @@ private:
     void getParams();
 
     void velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void velodyneUndistortCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void slamMapCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
