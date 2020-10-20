@@ -23,6 +23,9 @@
 #include "pcl/io/ply_io.h"
 #include "pcl/registration/icp.h"
 #include "pcl/registration/correspondence_estimation.h"
+#include "pcl/kdtree/kdtree_flann.h"
+#include "pcl/filters/extract_indices.h"
+#include "pcl/filters/passthrough.h"
 #include "pcl_ros/transforms.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -62,7 +65,8 @@ private:
     tf::StampedTransform kf_ref_to_velo_transform;
     uint32_t kf_ref_seq_, velo_seq_;
     uint64_t kf_ref_nsec_; // keep track of latest timestamp for submap
-    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map; // keep track of last submap
+    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map; // keep track of last submap
+    pcl::KdTreeFLANN<pcl::PointXYZI> kdtree;
 
     // params config
     std::string save_dir;

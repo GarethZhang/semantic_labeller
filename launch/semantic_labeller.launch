@@ -12,7 +12,7 @@
   <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
 
   <arg name="save_to_ply" default="true"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/poor-res-result-0.5m/"/>
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/results-full-slammap/"/>
 
   <arg name="max_distance" default="0.5"/>
 

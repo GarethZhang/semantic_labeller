@@ -20,6 +20,7 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     last_kf_ref (new pcl::PointCloud<pcl::PointXYZI>),
     slam_map(new pcl::PointCloud<pcl::PointXYZI>),
+    cur_sub_slam_map(new pcl::PointCloud<pcl::PointXYZI>),
     velo_sub_(nh_, "/velodyne_points", 10),
     velo_time_seq(velo_sub_, ros::Duration(0.1), ros::Duration(0.01), 10)
     { // constructor
@@ -76,13 +77,13 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
     // update global variable to store latest submap
     *last_kf_ref = *point_cloud;
 
-//    // save out transformed point cloud named after the seq number
-//    kf_ref_seq_ = msg->header.seq;
-//    kf_ref_ss_.str(""); kf_ref_ss_.clear();
-//    kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-//    kf_ref_str_ = kf_ref_ss_.str();
-//    ROS_INFO("SAVING KF_REF FILE");
-//    pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud);
+    // save out transformed point cloud named after the seq number
+    kf_ref_seq_ = msg->header.seq;
+    kf_ref_ss_.str(""); kf_ref_ss_.clear();
+    kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+    kf_ref_str_ = kf_ref_ss_.str();
+    ROS_INFO("SAVING KF_REF FILE");
+    pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud);
 
 }
 
@@ -101,15 +102,15 @@ void velodyne_listener_class::slamMapCallback(const sensor_msgs::PointCloud2::Co
     pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud (new pcl::PointCloud<pcl::PointXYZI>);
     pcl::fromPCLPointCloud2(*cloud, *point_cloud);
 
+    // remove points that have too low intensity
+    pcl::PassThrough<pcl::PointXYZI> intensity_pass;
+    intensity_pass.setInputCloud(point_cloud);
+    intensity_pass.setFilterFieldName("intensity");
+    intensity_pass.setFilterLimits(30.0, 255.0);
+
     // update global variable to store latest submap
     *slam_map = *point_cloud;
-
-    velo_seq_ = msg->header.seq;
-    velo_ss_.str(""); velo_ss_.clear();
-    velo_ss_ << save_dir << "slamMap_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-    velo_str_ = velo_ss_.str();
-    ROS_INFO("SAVING SLAM MAP FILE");
-    pcl::io::savePLYFileBinary(velo_str_, *slam_map);
+    kdtree.setInputCloud (slam_map);
 }
 
 // a simple callback function, used by the example subscriber.
@@ -148,10 +149,32 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
 
     // check if slam_map has got the full_map
     if (!slam_map->empty()){
+        // Use radius search in KD-tree to eliminate other regions of slam map
+        pcl::PointXYZI search_point;
+        search_point.x = kf_ref_to_velo_transform.getOrigin().x();
+        search_point.y = kf_ref_to_velo_transform.getOrigin().y();
+        search_point.z = kf_ref_to_velo_transform.getOrigin().z();
+        search_point.intensity = 0.0;
+
+        double search_radius = 100.0;
+        std::vector<int> pointIdxRadiusSearch;
+        std::vector<float> pointRadiusSquaredDistance;
+
+        pcl::ExtractIndices<pcl::PointXYZI> extract;
+        extract.setInputCloud (slam_map);
+
+        if (kdtree.radiusSearch(search_point, search_radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
+        {
+            boost::shared_ptr<std::vector<int>> index_ptr = boost::make_shared<std::vector<int>>(pointIdxRadiusSearch);
+            extract.setIndices(index_ptr);
+            extract.setNegative (false);
+            extract.filter (*cur_sub_slam_map);
+        }
+
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
         velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_in);
-        velodyne_listener_class::PointCloudXYZItoXYZ(*slam_map, *cloud_out);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*cur_sub_slam_map, *cloud_out);
         pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
         est.setInputSource(cloud_in);
         est.setInputTarget(cloud_out);
@@ -179,6 +202,13 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             velo_str_ = velo_ss_.str();
             ROS_INFO("SAVING VELO FILE");
             pcl::io::savePLYFileBinary(velo_str_, *point_cloud_out);
+
+            kf_ref_seq_ = msg->header.seq;
+            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+            kf_ref_ss_ << save_dir << "curSubSlamMap_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            kf_ref_str_ = kf_ref_ss_.str();
+            ROS_INFO("SAVING SLAM MAP FILE");
+            pcl::io::savePLYFileBinary(kf_ref_str_, *cur_sub_slam_map);
 
             velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
             velo_filtered_ss_ << save_dir << "velo_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
