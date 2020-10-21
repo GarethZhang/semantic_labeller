@@ -111,7 +111,7 @@ void velodyne_listener_class::slamMapCallback(const sensor_msgs::PointCloud2::Co
     pcl::PassThrough<pcl::PointXYZI> intensity_pass;
     intensity_pass.setInputCloud(point_cloud);
     intensity_pass.setFilterFieldName("intensity");
-    intensity_pass.setFilterLimits(30.0, 255.0);
+    intensity_pass.setFilterLimits(min_intensity, max_intensity);
 
     // update global variable to store latest submap
     *slam_map = *point_cloud;
@@ -187,8 +187,8 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         pcl::Correspondences all_correspondences;
         est.determineCorrespondences(all_correspondences, max_distance);
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::PointXYZ p;
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointXYZI p;
         int nr_correspondences = (int)all_correspondences.size();
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
@@ -196,6 +196,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             p.x = cloud_in->points[index_query].x;
             p.y = cloud_in->points[index_query].y;
             p.z = cloud_in->points[index_query].z;
+            p.intensity = point_cloud_out->points[index_query].intensity;
             cloud_filtered->push_back(p);
         }
 
@@ -303,8 +304,8 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         pcl::Correspondences all_correspondences;
         est.determineCorrespondences(all_correspondences, max_distance);
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::PointXYZ p;
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointXYZI p;
         int nr_correspondences = (int)all_correspondences.size();
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
@@ -312,6 +313,7 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             p.x = cloud_in->points[index_query].x;
             p.y = cloud_in->points[index_query].y;
             p.z = cloud_in->points[index_query].z;
+            p.intensity = point_cloud_out->points[index_query].intensity;
             cloud_filtered->push_back(p);
         }
 
@@ -353,6 +355,8 @@ void velodyne_listener_class::getParams() {
     nh_.param<bool>("save_to_ply", save_to_ply, true);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
+    nh_.param<float>("min_intensity", min_intensity, 1.0);
+    nh_.param<float>("max_intensity", max_intensity, 1.0);
 
     nh_.param<std::string>("submap_frame", submap_frame, "/kf_ref");
     nh_.param<std::string>("submap_topic", submap_topic, "/lidar_keyframe_slam/kfRef_cloud");

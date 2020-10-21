@@ -78,6 +78,7 @@ private:
     std::string submap_frame, submap_topic, slamMap_frame, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
     double max_distance;
+    float min_intensity, max_intensity;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
