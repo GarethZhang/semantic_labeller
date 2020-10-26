@@ -45,7 +45,7 @@ void velodyne_listener_class::initializeSubscribers() {
 //    velo_sub_ = nh_.subscribe("/velodyne_points", 1, &velodyne_listener_class::velodyneCallback, this);
     kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
     slam_map_sub_ = nh_.subscribe(slamMap_topic, 10, &velodyne_listener_class::slamMapCallback, this);
-    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
+//    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
     velo_undistort_time_seq.registerCallback(&velodyne_listener_class::velodyneUndistortCallback, this);
 
     // add more subscribers here, as needed
@@ -242,6 +242,10 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
     // the real work is done in this callback function
     // it wakes up every time a new message is published on "exampleMinimalSubTopic"
 
+    // track runtime
+//    ros::WallTime start_, end_;
+//    start_ = ros::WallTime::now();
+
     // initialize PCL point cloud (ROS)
     auto *cloud = new pcl::PCLPointCloud2;
     pcl::PCLPointCloud2ConstPtr cloudPtr(cloud);
@@ -293,9 +297,38 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             extract.filter (*cur_sub_slam_map_undistort);
         }
 
+        // Remove ground plane
+        pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+        pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+        // Create the segmentation object
+        pcl::SACSegmentation<pcl::PointXYZI> seg;
+        // Optional
+        seg.setOptimizeCoefficients (true);
+        // Mandatory
+        seg.setModelType (pcl::SACMODEL_PLANE);
+        seg.setMethodType (pcl::SAC_RANSAC);
+        seg.setDistanceThreshold (RANSAC_dist);
+
+        seg.setInputCloud (point_cloud_out);
+        seg.setMaxIterations(RANSAC_iter);
+        seg.segment (*inliers, *coefficients);
+
+//        ROS_INFO("%lu", inliers->indices.size());
+        pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud_no_ground (new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointXYZI p;
+        for (int i = 0; i < point_cloud_out->size(); ++i){
+            if (!std::binary_search(inliers->indices.begin(), inliers->indices.end(), i)){
+                p.x = point_cloud_out->points[i].x;
+                p.y = point_cloud_out->points[i].y;
+                p.z = point_cloud_out->points[i].z;
+                p.intensity = point_cloud_out->points[i].intensity;
+                point_cloud_no_ground->push_back(p);
+            }
+        }
+
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
-        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_in);
+        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_no_ground, *cloud_in);
         velodyne_listener_class::PointCloudXYZItoXYZ(*cur_sub_slam_map_undistort, *cloud_out);
         pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
         est.setInputSource(cloud_in);
@@ -305,7 +338,7 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         est.determineCorrespondences(all_correspondences, max_distance);
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::PointXYZI p;
+//        pcl::PointXYZI p;
         int nr_correspondences = (int)all_correspondences.size();
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
@@ -332,11 +365,12 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             ROS_INFO("SAVING VELO UNDISTORT FILE");
             pcl::io::savePLYFileBinary(velo_str_, *point_cloud_out);
 
-//            kf_ref_ss_.str(""); kf_ref_ss_.clear();
-//            kf_ref_ss_ << save_dir << "kf_ref_" << kf_ref_seq_ << "_to_" << velo_seq_ << "_" << kf_ref_nsec_ << ".ply";
-//            kf_ref_str_ = kf_ref_ss_.str();
-//            ROS_INFO("SAVING KF_REF FILE");
-//            pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_out);
+            kf_ref_seq_ = msg->header.seq;
+            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+            kf_ref_ss_ << save_dir << "velo_undistort_no_ground_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+            kf_ref_str_ = kf_ref_ss_.str();
+            ROS_INFO("SAVING VELO UNDISTORT NO GROUND FILE");
+            pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_no_ground);
 
             velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
             velo_filtered_ss_ << save_dir << "velo_undistort_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
@@ -355,8 +389,10 @@ void velodyne_listener_class::getParams() {
     nh_.param<bool>("save_to_ply", save_to_ply, true);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
-    nh_.param<float>("min_intensity", min_intensity, 1.0);
-    nh_.param<float>("max_intensity", max_intensity, 1.0);
+    nh_.param<float>("min_intensity", min_intensity, 0.0);
+    nh_.param<float>("max_intensity", max_intensity, 255.0);
+    nh_.param<double>("RANSAC_dist", RANSAC_dist, 1.0);
+    nh_.param<int>("RANSAC_iter", RANSAC_iter, 1000.0);
 
     nh_.param<std::string>("submap_frame", submap_frame, "/kf_ref");
     nh_.param<std::string>("submap_topic", submap_topic, "/lidar_keyframe_slam/kfRef_cloud");

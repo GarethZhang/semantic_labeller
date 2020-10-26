@@ -13,11 +13,13 @@
   <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
 
   <arg name="save_to_ply" default="true"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/results-full-slammap-s643/"/>
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/crap3/"/>
 
   <arg name="max_distance" default="0.5"/>
   <arg name="min_intensity" default="50.0"/>
   <arg name="max_intensity" default="255.0"/>
+  <arg name="RANSAC_iter" default="1000"/>
+  <arg name="RANSAC_dist" default="0.5"/>
 
   <!-- always make sure we are not using simulation time when running online-->
   <param unless="$(arg online)" name="/use_sim_time" value="true"/>
@@ -38,6 +40,8 @@
     <param name="max_distance" type="double" value="$(arg max_distance)"/>
     <param name="min_intensity" type="double" value="$(arg min_intensity)"/>
     <param name="max_intensity" type="double" value="$(arg max_intensity)"/>
+    <param name="RANSAC_dist" type="double" value="$(arg RANSAC_dist)"/>
+    <param name="RANSAC_iter" type="int" value="$(arg RANSAC_iter)"/>
 
     <param name="save_to_ply" value="$(arg save_to_ply)"/>
     <param name="save_dir" value="$(arg save_dir)" />

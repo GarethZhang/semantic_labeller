@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 #include "inttypes.h"
 //#include "semantic_labeller/semantic_labeller.hpp"
 
@@ -26,6 +27,9 @@
 #include "pcl/kdtree/kdtree_flann.h"
 #include "pcl/filters/extract_indices.h"
 #include "pcl/filters/passthrough.h"
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
 #include "pcl_ros/transforms.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -77,8 +81,9 @@ private:
     std::string save_dir;
     std::string submap_frame, submap_topic, slamMap_frame, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
-    double max_distance;
+    double max_distance, RANSAC_dist;
     float min_intensity, max_intensity;
+    int RANSAC_iter;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
