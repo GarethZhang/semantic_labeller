@@ -105,6 +105,9 @@ private:
     void PointCloudXYZItoXYZ (const pcl::PointCloud<pcl::PointXYZI>& in,
                               pcl::PointCloud<pcl::PointXYZ>& out);
 
+    pcl::Correspondences
+    find_correspondence(pcl::PointCloud<pcl::PointXYZI> &cloud_src, pcl::PointCloud<pcl::PointXYZI> &cloud_tgt,
+                        double distance);
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match

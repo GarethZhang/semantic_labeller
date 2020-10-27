@@ -318,8 +318,6 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             }
         }
 
-        ROS_INFO("GROUND POINTS: %lu", ground_points->size());
-
 //        // Save out the normals
 //        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_latent (new pcl::PointCloud<pcl::PointXYZ>);
 //        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_latent);
@@ -353,7 +351,7 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         for (auto& point :*point_cloud_out){
             point_dist = pcl::pointToPlaneDistanceSigned(point, coefficients->values[0], coefficients->values[1],
                                                          coefficients->values[2], coefficients->values[3]);
-            if (point_dist > dist_to_plane){
+            if (point_dist >= dist_to_plane){
                 point_cloud_no_ground->push_back(point);
             }
             else{
@@ -361,29 +359,52 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             }
         }
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
-        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_no_ground, *cloud_in);
-        velodyne_listener_class::PointCloudXYZItoXYZ(*cur_sub_slam_map_undistort, *cloud_out);
-        pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
-        est.setInputSource(cloud_in);
-        est.setInputTarget(cloud_out);
+        ROS_INFO("GROUND POINTS: %lu | NON-GROUND POINTS: %lu | TOTAL POINTS: %lu",
+                 ground_points->size(), point_cloud_no_ground->size(), point_cloud_out->size());
 
-        pcl::Correspondences all_correspondences;
-        est.determineCorrespondences(all_correspondences, max_distance);
+        pcl::Correspondences all_correspondences = find_correspondence(*point_cloud_no_ground, *cur_sub_slam_map_undistort, max_distance);
+//        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+//        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+//        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_no_ground, *cloud_in);
+//        velodyne_listener_class::PointCloudXYZItoXYZ(*cur_sub_slam_map_undistort, *cloud_out);
+//        pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
+//        est.setInputSource(cloud_in);
+//        est.setInputTarget(cloud_out);
+//
+//        pcl::Correspondences all_correspondences;
+//        est.determineCorrespondences(all_correspondences, max_distance);
 
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_init_filtered (new pcl::PointCloud<pcl::PointXYZI>);
         pcl::PointXYZI p;
         int nr_correspondences = (int)all_correspondences.size();
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
             index_query = all_correspondences[i].index_query;
-            p.x = cloud_in->points[index_query].x;
-            p.y = cloud_in->points[index_query].y;
-            p.z = cloud_in->points[index_query].z;
+            p.x = point_cloud_no_ground->points[index_query].x;
+            p.y = point_cloud_no_ground->points[index_query].y;
+            p.z = point_cloud_no_ground->points[index_query].z;
+            p.intensity = point_cloud_no_ground->points[index_query].intensity;
+            cloud_init_filtered->push_back(p);
+        }
+
+        ROS_INFO("TOTAL POINTS: %lu | AFTER INIT FILTER: %lu",
+                 point_cloud_out->size(), cloud_init_filtered->size());
+
+        pcl::Correspondences dilate_correspondences = find_correspondence(*point_cloud_out, *cloud_init_filtered, max_distance);
+
+        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
+        nr_correspondences = (int)dilate_correspondences.size();
+        for (int i = 0; i < nr_correspondences; ++i){
+            index_query = dilate_correspondences[i].index_query;
+            p.x = point_cloud_out->points[index_query].x;
+            p.y = point_cloud_out->points[index_query].y;
+            p.z = point_cloud_out->points[index_query].z;
             p.intensity = point_cloud_out->points[index_query].intensity;
             cloud_filtered->push_back(p);
         }
+
+        ROS_INFO("TOTAL POINTS: %lu | AFTER FILTER: %lu",
+                 point_cloud_out->size(), cloud_filtered->size());
 
         // publish the latent ROS messages
         pcl::toROSMsg(*ground_points, latent_msg);
@@ -458,6 +479,22 @@ void velodyne_listener_class::PointCloudXYZItoXYZ(const pcl::PointCloud<pcl::Poi
         p.x = point.x; p.y = point.y; p.z = point.z;
         out.points.push_back (p);
     }
+}
+
+pcl::Correspondences
+velodyne_listener_class::find_correspondence(pcl::PointCloud<pcl::PointXYZI> &cloud_src, pcl::PointCloud<pcl::PointXYZI> &cloud_tgt,
+                                             double distance) {
+    pcl::Correspondences all_correspondences;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
+    velodyne_listener_class::PointCloudXYZItoXYZ(cloud_src, *cloud_in);
+    velodyne_listener_class::PointCloudXYZItoXYZ(cloud_tgt, *cloud_out);
+    pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
+    est.setInputSource(cloud_in);
+    est.setInputTarget(cloud_out);
+    est.determineCorrespondences(all_correspondences, distance);
+
+    return all_correspondences;
 }
 
 int main(int argc, char **argv) {
