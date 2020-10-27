@@ -30,6 +30,8 @@
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/visualization/cloud_viewer.h>
 #include "pcl_ros/transforms.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
@@ -40,6 +42,9 @@
 #include "message_filters/time_sequencer.h"
 #include <pcl/registration/icp.h>
 
+
+
+#include <pcl/sample_consensus/sac_model_plane.h>
 
 ////message types used in this example code;  include more message types, as needed
 //#include <std_msgs/Bool.h>
@@ -64,8 +69,8 @@ private:
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_undistort_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_undistort_time_seq; //time sequencer
 
-    ros::Publisher velo_filtered_pub_, velo_undistort_filtered_pub_;
-    sensor_msgs::PointCloud2 velo_filtered_msg, velo_undistort_filtered_msg;
+    ros::Publisher velo_filtered_pub_, velo_undistort_filtered_pub_, latent_pub_;
+    sensor_msgs::PointCloud2 velo_filtered_msg, velo_undistort_filtered_msg, latent_msg;
 
     std::ostringstream velo_ss_, kf_ref_ss_, velo_filtered_ss_;
     std::string velo_str_, kf_ref_str_, velo_filtere_str_;
@@ -76,14 +81,15 @@ private:
     uint64_t kf_ref_nsec_; // keep track of latest timestamp for submap
     pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map, cur_sub_slam_map_undistort; // keep track of last submap
     pcl::KdTreeFLANN<pcl::PointXYZI> kdtree;
+    pcl::ModelCoefficients::Ptr coefficients;
 
     // params config
     std::string save_dir;
     std::string submap_frame, submap_topic, slamMap_frame, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
-    double max_distance, RANSAC_dist;
+    double max_distance, RANSAC_dist, normal_radius, kd_search_radius, normal_ang_thresh, dist_to_plane;
     float min_intensity, max_intensity;
-    int RANSAC_iter;
+    int RANSAC_iter, k_nearest;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services

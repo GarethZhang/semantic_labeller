@@ -22,6 +22,7 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     slam_map(new pcl::PointCloud<pcl::PointXYZI>),
     cur_sub_slam_map(new pcl::PointCloud<pcl::PointXYZI>),
     cur_sub_slam_map_undistort(new pcl::PointCloud<pcl::PointXYZI>),
+    coefficients(new pcl::ModelCoefficients),
     velo_sub_(nh_, "/velodyne_points", 10),
     velo_undistort_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 10),
     velo_time_seq(velo_sub_, ros::Duration(0.1), ros::Duration(0.01), 10),
@@ -56,6 +57,7 @@ void velodyne_listener_class::initializePublishers() {
     ROS_INFO("Initializing Publishers");
     velo_filtered_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_filtered", 1, true);
     velo_undistort_filtered_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_undistort_filtered", 1, true);
+    latent_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_latent", 1, true); // latent one
     //add more publishers, as needed
     // note: COULD make pub_ a public member function, if want to use it within "main()"
 }
@@ -282,47 +284,80 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         search_point.z = velo_undistort_to_map_transform.getOrigin().z();
         search_point.intensity = 0.0;
 
-        double search_radius = 100.0;
         std::vector<int> pointIdxRadiusSearch;
         std::vector<float> pointRadiusSquaredDistance;
 
-        pcl::ExtractIndices<pcl::PointXYZI> extract;
-        extract.setInputCloud (slam_map);
+        pcl::ExtractIndices<pcl::PointXYZI> slam_map_extract;
+        slam_map_extract.setInputCloud (slam_map);
 
-        if (kdtree.radiusSearch(search_point, search_radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
+        if (kdtree.radiusSearch(search_point, kd_search_radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
         {
             boost::shared_ptr<std::vector<int>> index_ptr = boost::make_shared<std::vector<int>>(pointIdxRadiusSearch);
-            extract.setIndices(index_ptr);
-            extract.setNegative (false);
-            extract.filter (*cur_sub_slam_map_undistort);
+            slam_map_extract.setIndices(index_ptr);
+            slam_map_extract.setNegative (false);
+            slam_map_extract.filter (*cur_sub_slam_map_undistort);
         }
 
-        // Remove ground plane
-        pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+        // Estimate normal
+        pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> ne;
+        pcl::search::KdTree<pcl::PointXYZI>::Ptr velo_undistort_tree (new pcl::search::KdTree<pcl::PointXYZI> ());
+        pcl::PointCloud<pcl::Normal>::Ptr velo_undistort_normals (new pcl::PointCloud<pcl::Normal>);
+        ne.setSearchMethod (velo_undistort_tree);
+        ne.setInputCloud (point_cloud_out);
+//        ne.setKSearch (k_nearest);
+        ne.setRadiusSearch(normal_radius);
+        ne.compute (*velo_undistort_normals);
+
+        // Use normals to extract ground plane points
+        pcl::PointCloud<pcl::PointXYZI>::Ptr ground_points (new pcl::PointCloud<pcl::PointXYZI>);
+        float angle_vertical_thresh = M_PI * normal_ang_thresh / 180.0;
+        float cos_thresh = cos(angle_vertical_thresh);
+        for (int normal_i = 0; normal_i < velo_undistort_normals->size(); ++normal_i){
+            if (abs(velo_undistort_normals->points[normal_i].normal_z) < cos_thresh){
+                ground_points->push_back(point_cloud_out->points[normal_i]);
+            }
+        }
+
+        ROS_INFO("GROUND POINTS: %lu", ground_points->size());
+
+//        // Save out the normals
+//        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_latent (new pcl::PointCloud<pcl::PointXYZ>);
+//        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_out, *cloud_latent);
+//        ROS_INFO("cloud_latent POINTS: %lu", cloud_latent->size());
+//        ROS_INFO("velo_undistort_normals POINTS: %lu", velo_undistort_normals->size());
+//        pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointNormal>);
+//        pcl::concatenateFields(*cloud_latent, *velo_undistort_normals, *cloud_with_normals);
+//        ROS_INFO("cloud_with_normals POINTS: %lu", cloud_with_normals->size());
+//        velo_seq_ = msg->header.seq;
+//        velo_ss_.str(""); velo_ss_.clear();
+//        velo_ss_ << save_dir << "normal_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".pcd";
+//        velo_str_ = velo_ss_.str();
+//        pcl::io::savePCDFileASCII(velo_str_, *cloud_with_normals);
+
+        // Estimate plane coefficients
         pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-        // Create the segmentation object
         pcl::SACSegmentation<pcl::PointXYZI> seg;
-        // Optional
         seg.setOptimizeCoefficients (true);
-        // Mandatory
         seg.setModelType (pcl::SACMODEL_PLANE);
         seg.setMethodType (pcl::SAC_RANSAC);
         seg.setDistanceThreshold (RANSAC_dist);
 
-        seg.setInputCloud (point_cloud_out);
+        seg.setInputCloud (ground_points);
         seg.setMaxIterations(RANSAC_iter);
         seg.segment (*inliers, *coefficients);
 
-//        ROS_INFO("%lu", inliers->indices.size());
+        // Pick points that do not fit in this ground plane
+        ground_points->clear();
         pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud_no_ground (new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::PointXYZI p;
-        for (int i = 0; i < point_cloud_out->size(); ++i){
-            if (!std::binary_search(inliers->indices.begin(), inliers->indices.end(), i)){
-                p.x = point_cloud_out->points[i].x;
-                p.y = point_cloud_out->points[i].y;
-                p.z = point_cloud_out->points[i].z;
-                p.intensity = point_cloud_out->points[i].intensity;
-                point_cloud_no_ground->push_back(p);
+        double point_dist;
+        for (auto& point :*point_cloud_out){
+            point_dist = pcl::pointToPlaneDistanceSigned(point, coefficients->values[0], coefficients->values[1],
+                                                         coefficients->values[2], coefficients->values[3]);
+            if (point_dist > dist_to_plane){
+                point_cloud_no_ground->push_back(point);
+            }
+            else{
+                ground_points->push_back(point);
             }
         }
 
@@ -338,7 +373,7 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         est.determineCorrespondences(all_correspondences, max_distance);
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
-//        pcl::PointXYZI p;
+        pcl::PointXYZI p;
         int nr_correspondences = (int)all_correspondences.size();
         int index_query;
         for (int i = 0; i < nr_correspondences; ++i){
@@ -349,6 +384,12 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
             p.intensity = point_cloud_out->points[index_query].intensity;
             cloud_filtered->push_back(p);
         }
+
+        // publish the latent ROS messages
+        pcl::toROSMsg(*ground_points, latent_msg);
+        latent_msg.header.frame_id = "map";
+        latent_msg.header.stamp = msg->header.stamp;
+        latent_pub_.publish(latent_msg);
 
         // publish the ROS messages
         pcl::toROSMsg(*cloud_filtered, velo_undistort_filtered_msg);
@@ -393,6 +434,11 @@ void velodyne_listener_class::getParams() {
     nh_.param<float>("max_intensity", max_intensity, 255.0);
     nh_.param<double>("RANSAC_dist", RANSAC_dist, 1.0);
     nh_.param<int>("RANSAC_iter", RANSAC_iter, 1000.0);
+    nh_.param<double>("normal_radius", normal_radius, 1.0);
+    nh_.param<double>("normal_ang_thresh", normal_ang_thresh, 30.0);
+    nh_.param<double>("dist_to_plane", dist_to_plane, 30.0);
+    nh_.param<int>("k_nearest", k_nearest, 30);
+    nh_.param<double>("kd_search_radius", kd_search_radius, 100.0);
 
     nh_.param<std::string>("submap_frame", submap_frame, "/kf_ref");
     nh_.param<std::string>("submap_topic", submap_topic, "/lidar_keyframe_slam/kfRef_cloud");
