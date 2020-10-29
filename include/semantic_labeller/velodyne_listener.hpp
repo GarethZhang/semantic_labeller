@@ -69,8 +69,8 @@ private:
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_undistort_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_undistort_time_seq; //time sequencer
 
-    ros::Publisher velo_filtered_pub_, velo_undistort_filtered_pub_, latent_pub_;
-    sensor_msgs::PointCloud2 velo_filtered_msg, velo_undistort_filtered_msg, latent_msg;
+    ros::Publisher velo_filtered_pub_, velo_undistort_filtered_pub_, latent_pub_, ground_plane_pub_, dnm_pub_, dbm_pub_, static_pub_;
+    sensor_msgs::PointCloud2 velo_filtered_msg, velo_undistort_filtered_msg, latent_msg, ground_plane_msg, dnm_msg, dbm_msg, static_msg;
 
     std::ostringstream velo_ss_, kf_ref_ss_, velo_filtered_ss_;
     std::string velo_str_, kf_ref_str_, velo_filtere_str_;
@@ -79,7 +79,7 @@ private:
     tf::StampedTransform kf_ref_to_velo_transform, velo_to_map_transform, velo_undistort_to_map_transform;
     uint32_t kf_ref_seq_, velo_seq_;
     uint64_t kf_ref_nsec_; // keep track of latest timestamp for submap
-    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map, cur_sub_slam_map_undistort; // keep track of last submap
+    pcl::PointCloud<pcl::PointXYZI>::Ptr last_kf_ref, slam_map, cur_sub_slam_map, cur_sub_slam_map_undistort, last_velo_undistort; // keep track of last submap
     pcl::KdTreeFLANN<pcl::PointXYZI> kdtree;
     pcl::ModelCoefficients::Ptr coefficients;
 
@@ -87,7 +87,7 @@ private:
     std::string save_dir;
     std::string submap_frame, submap_topic, slamMap_frame, slamMap_topic, velodyne_frame, velodyne_topic;
     bool save_to_ply;
-    double max_distance, RANSAC_dist, normal_radius, kd_search_radius, normal_ang_thresh, dist_to_plane;
+    double cons_scan_max_d, scan_to_map_max_d, RANSAC_dist, normal_radius, kd_search_radius, normal_ang_thresh, dist_to_plane;
     float min_intensity, max_intensity;
     int RANSAC_iter, k_nearest;
 
@@ -108,6 +108,12 @@ private:
     pcl::Correspondences
     find_correspondence(pcl::PointCloud<pcl::PointXYZI> &cloud_src, pcl::PointCloud<pcl::PointXYZI> &cloud_tgt,
                         double distance);
+
+    pcl::PointCloud<pcl::PointXYZI> &
+    extract_points_using_indices(pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud, std::vector<int> index_query, bool setNegative);
+
+    void add_to_points(pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud_in, pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud_out, float intensity_value);
+
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match

@@ -22,6 +22,7 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     slam_map(new pcl::PointCloud<pcl::PointXYZI>),
     cur_sub_slam_map(new pcl::PointCloud<pcl::PointXYZI>),
     cur_sub_slam_map_undistort(new pcl::PointCloud<pcl::PointXYZI>),
+    last_velo_undistort(new pcl::PointCloud<pcl::PointXYZI>),
     coefficients(new pcl::ModelCoefficients),
     velo_sub_(nh_, "/velodyne_points", 10),
     velo_undistort_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 10),
@@ -58,6 +59,10 @@ void velodyne_listener_class::initializePublishers() {
     velo_filtered_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_filtered", 1, true);
     velo_undistort_filtered_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_undistort_filtered", 1, true);
     latent_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_latent", 1, true); // latent one
+    ground_plane_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/ground_plane", 1, true); // latent one
+    dnm_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/dynamic_and_moving", 1, true); // latent one
+    dbm_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/dynamic_not_moving", 1, true); // latent one
+    static_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/static", 1, true); // latent one
     //add more publishers, as needed
     // note: COULD make pub_ a public member function, if want to use it within "main()"
 }
@@ -187,7 +192,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         est.setInputTarget(cloud_out);
 
         pcl::Correspondences all_correspondences;
-        est.determineCorrespondences(all_correspondences, max_distance);
+        est.determineCorrespondences(all_correspondences, scan_to_map_max_d);
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
         pcl::PointXYZI p;
@@ -269,54 +274,71 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
         }
         catch (tf::TransformException ex){
             ROS_ERROR("%s",ex.what());
-            ros::Duration(1.0).sleep();
+//            ros::Duration(1.0).sleep();
         }
     }
 
     if (!slam_map->empty() && available){
         pcl_ros::transformPointCloud (*point_cloud, *point_cloud_out, velo_undistort_to_map_transform);
         point_cloud_out->header.frame_id = slamMap_frame;
+        point_cloud_out->header.stamp = msg->header.stamp.toNSec();
+        point_cloud_out->header.seq = msg->header.seq;
 
-        // Use radius search in KD-tree to eliminate other regions of slam map
-        pcl::PointXYZI search_point;
-        search_point.x = velo_undistort_to_map_transform.getOrigin().x();
-        search_point.y = velo_undistort_to_map_transform.getOrigin().y();
-        search_point.z = velo_undistort_to_map_transform.getOrigin().z();
-        search_point.intensity = 0.0;
-
-        std::vector<int> pointIdxRadiusSearch;
-        std::vector<float> pointRadiusSquaredDistance;
-
-        pcl::ExtractIndices<pcl::PointXYZI> slam_map_extract;
-        slam_map_extract.setInputCloud (slam_map);
-
-        if (kdtree.radiusSearch(search_point, kd_search_radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
-        {
-            boost::shared_ptr<std::vector<int>> index_ptr = boost::make_shared<std::vector<int>>(pointIdxRadiusSearch);
-            slam_map_extract.setIndices(index_ptr);
-            slam_map_extract.setNegative (false);
-            slam_map_extract.filter (*cur_sub_slam_map_undistort);
+        if (last_velo_undistort->empty()){
+            *last_velo_undistort = *point_cloud_out;
         }
+        else{
+            pcl::PointCloud<pcl::PointXYZI>::Ptr ground_plane_cand_points (new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr ground_plane_points (new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr dyna_and_moving_points (new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr dyna_no_moving_points (new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr static_points (new pcl::PointCloud<pcl::PointXYZI>);
 
-        // Estimate normal
-        pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> ne;
-        pcl::search::KdTree<pcl::PointXYZI>::Ptr velo_undistort_tree (new pcl::search::KdTree<pcl::PointXYZI> ());
-        pcl::PointCloud<pcl::Normal>::Ptr velo_undistort_normals (new pcl::PointCloud<pcl::Normal>);
-        ne.setSearchMethod (velo_undistort_tree);
-        ne.setInputCloud (point_cloud_out);
-//        ne.setKSearch (k_nearest);
-        ne.setRadiusSearch(normal_radius);
-        ne.compute (*velo_undistort_normals);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr residual_points (new pcl::PointCloud<pcl::PointXYZI>);
+            pcl::PointCloud<pcl::PointXYZI>::Ptr classified_points (new pcl::PointCloud<pcl::PointXYZI>);
 
-        // Use normals to extract ground plane points
-        pcl::PointCloud<pcl::PointXYZI>::Ptr ground_points (new pcl::PointCloud<pcl::PointXYZI>);
-        float angle_vertical_thresh = M_PI * normal_ang_thresh / 180.0;
-        float cos_thresh = cos(angle_vertical_thresh);
-        for (int normal_i = 0; normal_i < velo_undistort_normals->size(); ++normal_i){
-            if (abs(velo_undistort_normals->points[normal_i].normal_z) < cos_thresh){
-                ground_points->push_back(point_cloud_out->points[normal_i]);
+            /////////////////////////
+            // Ground plane detection
+            /////////////////////////
+            // Use radius search in KD-tree to eliminate other regions of slam map
+            pcl::PointXYZI search_point;
+            search_point.x = velo_undistort_to_map_transform.getOrigin().x();
+            search_point.y = velo_undistort_to_map_transform.getOrigin().y();
+            search_point.z = velo_undistort_to_map_transform.getOrigin().z();
+            search_point.intensity = 0.0;
+
+            std::vector<int> pointIdxRadiusSearch;
+            std::vector<float> pointRadiusSquaredDistance;
+
+            pcl::ExtractIndices<pcl::PointXYZI> slam_map_extract;
+            slam_map_extract.setInputCloud (slam_map);
+
+            if (kdtree.radiusSearch(search_point, kd_search_radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
+            {
+                boost::shared_ptr<std::vector<int>> index_ptr = boost::make_shared<std::vector<int>>(pointIdxRadiusSearch);
+                slam_map_extract.setIndices(index_ptr);
+                slam_map_extract.setNegative (false);
+                slam_map_extract.filter (*cur_sub_slam_map_undistort);
             }
-        }
+
+            // Estimate normal
+            pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> ne;
+            pcl::search::KdTree<pcl::PointXYZI>::Ptr velo_undistort_tree (new pcl::search::KdTree<pcl::PointXYZI> ());
+            pcl::PointCloud<pcl::Normal>::Ptr velo_undistort_normals (new pcl::PointCloud<pcl::Normal>);
+            ne.setSearchMethod (velo_undistort_tree);
+            ne.setInputCloud (point_cloud_out);
+//        ne.setKSearch (k_nearest);
+            ne.setRadiusSearch(normal_radius);
+            ne.compute (*velo_undistort_normals);
+
+            // Use normals to extract ground plane points
+            float angle_vertical_thresh = M_PI * normal_ang_thresh / 180.0;
+            float cos_thresh = cos(angle_vertical_thresh);
+            for (int normal_i = 0; normal_i < velo_undistort_normals->size(); ++normal_i){
+                if (abs(velo_undistort_normals->points[normal_i].normal_z) < cos_thresh){
+                    ground_plane_cand_points->push_back(point_cloud_out->points[normal_i]);
+                }
+            }
 
 //        // Save out the normals
 //        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_latent (new pcl::PointCloud<pcl::PointXYZ>);
@@ -332,117 +354,148 @@ void velodyne_listener_class::velodyneUndistortCallback(const sensor_msgs::Point
 //        velo_str_ = velo_ss_.str();
 //        pcl::io::savePCDFileASCII(velo_str_, *cloud_with_normals);
 
-        // Estimate plane coefficients
-        pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-        pcl::SACSegmentation<pcl::PointXYZI> seg;
-        seg.setOptimizeCoefficients (true);
-        seg.setModelType (pcl::SACMODEL_PLANE);
-        seg.setMethodType (pcl::SAC_RANSAC);
-        seg.setDistanceThreshold (RANSAC_dist);
+            // Estimate plane coefficients
+            pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+            pcl::SACSegmentation<pcl::PointXYZI> seg;
+            seg.setOptimizeCoefficients (true);
+            seg.setModelType (pcl::SACMODEL_PLANE);
+            seg.setMethodType (pcl::SAC_RANSAC);
+            seg.setDistanceThreshold (RANSAC_dist);
 
-        seg.setInputCloud (ground_points);
-        seg.setMaxIterations(RANSAC_iter);
-        seg.segment (*inliers, *coefficients);
+            seg.setInputCloud (ground_plane_cand_points);
+            seg.setMaxIterations(RANSAC_iter);
+            seg.segment (*inliers, *coefficients);
 
-        // Pick points that do not fit in this ground plane
-        ground_points->clear();
-        pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud_no_ground (new pcl::PointCloud<pcl::PointXYZI>);
-        double point_dist;
-        for (auto& point :*point_cloud_out){
-            point_dist = pcl::pointToPlaneDistanceSigned(point, coefficients->values[0], coefficients->values[1],
-                                                         coefficients->values[2], coefficients->values[3]);
-            if (point_dist >= dist_to_plane){
-                point_cloud_no_ground->push_back(point);
+            // Pick points that do not fit in this ground plane
+            double point_dist;
+            for (auto& point :*point_cloud_out){
+                point_dist = pcl::pointToPlaneDistanceSigned(point, coefficients->values[0], coefficients->values[1],
+                                                             coefficients->values[2], coefficients->values[3]);
+                if (point_dist >= dist_to_plane){
+                    residual_points->push_back(point);
+                }
+                else{
+                    ground_plane_points->push_back(point);
+                }
             }
-            else{
-                ground_points->push_back(point);
+
+            ////////////////////////////
+            // Dynamic and moving points
+            ////////////////////////////
+
+            // TODO add roslaunch param for distance
+            pcl::Correspondences dnm_correspondences = find_correspondence(*residual_points, *last_velo_undistort, cons_scan_max_d);
+            std::vector<int> dnm_index_query;
+            for (auto & dnm_correspondence : dnm_correspondences)
+                dnm_index_query.push_back(dnm_correspondence.index_query);
+            *dyna_and_moving_points = extract_points_using_indices(residual_points, dnm_index_query, true);
+
+//            kf_ref_seq_ = msg->header.seq;
+//            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+//            kf_ref_ss_ << save_dir << "residual_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".pcd";
+//            kf_ref_str_ = kf_ref_ss_.str();
+//            ROS_INFO("SAVING RESIDUAL FILE");
+//            pcl::io::savePCDFileASCII(kf_ref_str_, *residual_points);
+
+            *residual_points = extract_points_using_indices(residual_points, dnm_index_query, false);
+
+//            kf_ref_seq_ = msg->header.seq;
+//            kf_ref_ss_.str(""); kf_ref_ss_.clear();
+//            kf_ref_ss_ << save_dir << "last_velo_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".pcd";
+//            kf_ref_str_ = kf_ref_ss_.str();
+//            ROS_INFO("SAVING LAST VELO FILE");
+//            pcl::io::savePCDFileASCII(kf_ref_str_, *last_velo_undistort);
+
+            ////////////////////////////
+            // Dynamic not moving points
+            ////////////////////////////
+
+            pcl::Correspondences dbm_correspondences = find_correspondence(*residual_points, *cur_sub_slam_map_undistort, scan_to_map_max_d);
+            std::vector<int> dbm_index_query;
+            for (auto & dbm_correspondence : dbm_correspondences)
+                dbm_index_query.push_back(dbm_correspondence.index_query);
+            *dyna_no_moving_points = extract_points_using_indices(residual_points, dbm_index_query, true);
+
+            ////////////////
+            // Static points
+            ////////////////
+
+            *static_points = extract_points_using_indices(residual_points, dbm_index_query, false);
+
+            //////////////////
+            // Join all points
+            //////////////////
+            add_to_points(ground_plane_points, classified_points, 63.0);
+            add_to_points(dyna_and_moving_points, classified_points, 127.0);
+            add_to_points(dyna_no_moving_points, classified_points, 191.0);
+            add_to_points(static_points, classified_points, 255.0);
+            ROS_INFO("GROUND PLANE POINTS: %lu | DYNA AND MOVING POINTS: %lu | DYNA NO MOVING POINTS: %lu | STATIC POINTS: %lu | TOTAL POINTS: %lu",
+                     ground_plane_points->size(), dyna_and_moving_points->size(), dyna_no_moving_points->size(), static_points->size(), classified_points->size());
+
+            // publish the latent ROS messages
+            pcl::toROSMsg(*classified_points, latent_msg);
+            latent_msg.header.frame_id = "map";
+            latent_msg.header.stamp = msg->header.stamp;
+            latent_pub_.publish(latent_msg);
+
+            pcl::toROSMsg(*ground_plane_points, ground_plane_msg);
+            ground_plane_msg.header.frame_id = "map";
+            ground_plane_msg.header.stamp = msg->header.stamp;
+            ground_plane_pub_.publish(ground_plane_msg);
+
+            pcl::toROSMsg(*dyna_and_moving_points, dnm_msg);
+            dnm_msg.header.frame_id = "map";
+            dnm_msg.header.stamp = msg->header.stamp;
+            dnm_pub_.publish(dnm_msg);
+
+            pcl::toROSMsg(*dyna_no_moving_points, dbm_msg);
+            dbm_msg.header.frame_id = "map";
+            dbm_msg.header.stamp = msg->header.stamp;
+            dbm_pub_.publish(dbm_msg);
+
+            pcl::toROSMsg(*static_points, static_msg);
+            static_msg.header.frame_id = "map";
+            static_msg.header.stamp = msg->header.stamp;
+            static_pub_.publish(static_msg);
+
+//            // publish the ROS messages
+//            pcl::toROSMsg(*static_points, velo_undistort_filtered_msg);
+//            velo_undistort_filtered_msg.header.frame_id = "map";
+//            velo_undistort_filtered_msg.header.stamp = msg->header.stamp;
+//            velo_undistort_filtered_pub_.publish(velo_undistort_filtered_msg);
+
+            // save out transformed point cloud named after the seq number
+            if (save_to_ply){
+                velo_seq_ = msg->header.seq;
+                velo_ss_.str(""); velo_ss_.clear();
+                velo_ss_ << save_dir << "velo_undistort_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+                velo_str_ = velo_ss_.str();
+                ROS_INFO("SAVING VELO UNDISTORT FILE");
+                pcl::io::savePLYFileBinary(velo_str_, *point_cloud_out);
+
+//                kf_ref_seq_ = msg->header.seq;
+//                kf_ref_ss_.str(""); kf_ref_ss_.clear();
+//                kf_ref_ss_ << save_dir << "velo_undistort_no_ground_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+//                kf_ref_str_ = kf_ref_ss_.str();
+//                ROS_INFO("SAVING VELO UNDISTORT NO GROUND FILE");
+//                pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_no_ground);
+
+                velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
+                velo_filtered_ss_ << save_dir << "velo_undistort_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
+                velo_filtere_str_ = velo_filtered_ss_.str();
+                ROS_INFO("SAVING VELO UNDISTORT FILTERED FILE");
+                pcl::io::savePLYFileBinary(velo_filtere_str_, *static_points);
             }
-        }
 
-        ROS_INFO("GROUND POINTS: %lu | NON-GROUND POINTS: %lu | TOTAL POINTS: %lu",
-                 ground_points->size(), point_cloud_no_ground->size(), point_cloud_out->size());
-
-        pcl::Correspondences all_correspondences = find_correspondence(*point_cloud_no_ground, *cur_sub_slam_map_undistort, max_distance);
-//        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new pcl::PointCloud<pcl::PointXYZ>);
-//        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZ>);
-//        velodyne_listener_class::PointCloudXYZItoXYZ(*point_cloud_no_ground, *cloud_in);
-//        velodyne_listener_class::PointCloudXYZItoXYZ(*cur_sub_slam_map_undistort, *cloud_out);
-//        pcl::registration::CorrespondenceEstimation<pcl::PointXYZ, pcl::PointXYZ> est;
-//        est.setInputSource(cloud_in);
-//        est.setInputTarget(cloud_out);
-//
-//        pcl::Correspondences all_correspondences;
-//        est.determineCorrespondences(all_correspondences, max_distance);
-
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_init_filtered (new pcl::PointCloud<pcl::PointXYZI>);
-        pcl::PointXYZI p;
-        int nr_correspondences = (int)all_correspondences.size();
-        int index_query;
-        for (int i = 0; i < nr_correspondences; ++i){
-            index_query = all_correspondences[i].index_query;
-            p.x = point_cloud_no_ground->points[index_query].x;
-            p.y = point_cloud_no_ground->points[index_query].y;
-            p.z = point_cloud_no_ground->points[index_query].z;
-            p.intensity = point_cloud_no_ground->points[index_query].intensity;
-            cloud_init_filtered->push_back(p);
-        }
-
-        ROS_INFO("TOTAL POINTS: %lu | AFTER INIT FILTER: %lu",
-                 point_cloud_out->size(), cloud_init_filtered->size());
-
-        pcl::Correspondences dilate_correspondences = find_correspondence(*point_cloud_out, *cloud_init_filtered, max_distance);
-
-        pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_filtered (new pcl::PointCloud<pcl::PointXYZI>);
-        nr_correspondences = (int)dilate_correspondences.size();
-        for (int i = 0; i < nr_correspondences; ++i){
-            index_query = dilate_correspondences[i].index_query;
-            p.x = point_cloud_out->points[index_query].x;
-            p.y = point_cloud_out->points[index_query].y;
-            p.z = point_cloud_out->points[index_query].z;
-            p.intensity = point_cloud_out->points[index_query].intensity;
-            cloud_filtered->push_back(p);
-        }
-
-        ROS_INFO("TOTAL POINTS: %lu | AFTER FILTER: %lu",
-                 point_cloud_out->size(), cloud_filtered->size());
-
-        // publish the latent ROS messages
-        pcl::toROSMsg(*ground_points, latent_msg);
-        latent_msg.header.frame_id = "map";
-        latent_msg.header.stamp = msg->header.stamp;
-        latent_pub_.publish(latent_msg);
-
-        // publish the ROS messages
-        pcl::toROSMsg(*cloud_filtered, velo_undistort_filtered_msg);
-        velo_undistort_filtered_msg.header.frame_id = "map";
-        velo_undistort_filtered_msg.header.stamp = msg->header.stamp;
-        velo_undistort_filtered_pub_.publish(velo_undistort_filtered_msg);
-
-        // save out transformed point cloud named after the seq number
-        if (save_to_ply){
-            velo_seq_ = msg->header.seq;
-            velo_ss_.str(""); velo_ss_.clear();
-            velo_ss_ << save_dir << "velo_undistort_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-            velo_str_ = velo_ss_.str();
-            ROS_INFO("SAVING VELO UNDISTORT FILE");
-            pcl::io::savePLYFileBinary(velo_str_, *point_cloud_out);
-
-            kf_ref_seq_ = msg->header.seq;
-            kf_ref_ss_.str(""); kf_ref_ss_.clear();
-            kf_ref_ss_ << save_dir << "velo_undistort_no_ground_" << kf_ref_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-            kf_ref_str_ = kf_ref_ss_.str();
-            ROS_INFO("SAVING VELO UNDISTORT NO GROUND FILE");
-            pcl::io::savePLYFileBinary(kf_ref_str_, *point_cloud_no_ground);
-
-            velo_filtered_ss_.str(""); velo_filtered_ss_.clear();
-            velo_filtered_ss_ << save_dir << "velo_undistort_filtered_" << velo_seq_ << "_" << msg->header.stamp.toNSec() << ".ply";
-            velo_filtere_str_ = velo_filtered_ss_.str();
-            ROS_INFO("SAVING VELO UNDISTORT FILTERED FILE");
-            pcl::io::savePLYFileBinary(velo_filtere_str_, *cloud_filtered);
+            //////////////////////////
+            // Update global variables
+            //////////////////////////
+            *last_velo_undistort = *point_cloud_out;
         }
     }
     else{
-        ROS_INFO("SUBMAP EMPTY!");
+        if (slam_map->empty())
+            ROS_INFO("SUBMAP EMPTY!");
     }
 }
 
@@ -450,7 +503,8 @@ void velodyne_listener_class::getParams() {
     nh_.param<std::string>("save_dir", save_dir, "/home/haowei/Desktop/");
     nh_.param<bool>("save_to_ply", save_to_ply, true);
 
-    nh_.param<double>("max_distance", max_distance, 1.0);
+    nh_.param<double>("cons_scan_max_d", cons_scan_max_d, 1.0);
+    nh_.param<double>("scan_to_map_max_d", scan_to_map_max_d, 1.0);
     nh_.param<float>("min_intensity", min_intensity, 0.0);
     nh_.param<float>("max_intensity", max_intensity, 255.0);
     nh_.param<double>("RANSAC_dist", RANSAC_dist, 1.0);
@@ -495,6 +549,30 @@ velodyne_listener_class::find_correspondence(pcl::PointCloud<pcl::PointXYZI> &cl
     est.determineCorrespondences(all_correspondences, distance);
 
     return all_correspondences;
+}
+
+pcl::PointCloud<pcl::PointXYZI> &
+velodyne_listener_class::extract_points_using_indices(pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud, std::vector<int> index_query,
+                                                      bool setNegative) {
+
+    pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_out (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::ExtractIndices<pcl::PointXYZI> extract;
+    extract.setInputCloud (cloud);
+
+    boost::shared_ptr<std::vector<int>> index_ptr = boost::make_shared<std::vector<int>>(index_query);
+    extract.setIndices(index_ptr);
+    extract.setNegative (setNegative);
+    extract.filter (*cloud_out);
+    return *cloud_out;
+}
+
+void velodyne_listener_class::add_to_points(pcl::PointCloud<pcl::PointXYZI>::Ptr& cloud_in, pcl::PointCloud<pcl::PointXYZI>::Ptr &cloud_out,
+                                            float intensity_value) {
+    for (auto& point: *cloud_in){
+        pcl::PointXYZI p;
+        p.x = point.x; p.y = point.y; p.z = point.z; p.intensity = intensity_value;
+        cloud_out->push_back(p);
+    }
 }
 
 int main(int argc, char **argv) {
