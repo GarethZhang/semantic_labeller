@@ -79,8 +79,7 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
     size_t N = (size_t)(msg->width * msg->height);
 
     // Loop over points and copy in vector container. Do the filtering if necessary
-    PointCloudXYZPtr kf_ref_velo(new PointCloudXYZ ());
-    PointCloudXYZPtr kf_ref_velo_transformed(new PointCloudXYZ ());
+    vector<PointXYZ> kf_ref_velo;
     vector<PointXYZ> f_pts;
     f_pts.reserve(N);
     for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
@@ -88,13 +87,15 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
          ++iter_x, ++iter_y, ++iter_z)
     {
         // Add all points to the vector container
-        kf_ref_velo->points.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
-        kf_ref_velo_transformed->points.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
+        kf_ref_velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
     }
 
+    // create a copy of the point cloud vector
+    vector<PointXYZ> kf_ref_velo_transformed(kf_ref_velo);
+
     // Matrix for original/aligned data (Shallow copy of parts of the points vector)
-    Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> kf_ref_velo_mat((float*)kf_ref_velo->points.data(), 3, N);
-    Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> kf_ref_velo_transformed_mat((float*)kf_ref_velo_transformed->points.data(), 3, N);
+    Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> kf_ref_velo_mat((float*)kf_ref_velo.data(), 3, N);
+    Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> kf_ref_velo_transformed_mat((float*)kf_ref_velo_transformed.data(), 3, N);
 
     // Apply initial transformation
     Eigen::Matrix3f R_init = (eigenTr.matrix().block(0, 0, 3, 3)).cast<float>();
@@ -103,11 +104,11 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
 
     // Publish ros messages
     pcl::PointXYZ p;
-    int nr_correspondences = kf_ref_velo_transformed->size();
+    int nr_correspondences = kf_ref_velo_transformed.size();
     for (int i = 0; i < nr_correspondences; ++i){
-        p.x = kf_ref_velo_transformed->points[i].x;
-        p.y = kf_ref_velo_transformed->points[i].y;
-        p.z = kf_ref_velo_transformed->points[i].z;
+        p.x = kf_ref_velo_transformed[i].x;
+        p.y = kf_ref_velo_transformed[i].y;
+        p.z = kf_ref_velo_transformed[i].z;
         map_publish->push_back(p);
     }
 

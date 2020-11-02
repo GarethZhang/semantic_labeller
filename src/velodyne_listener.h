@@ -19,6 +19,8 @@
 
 #include "grid_subsampling/grid_subsampling.h"
 #include "himmelsbach/himmelsbach.h"
+#include "pointmap/pointmap.h"
+#include "polar_processing/polar_processing.h"
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -60,10 +62,15 @@ private:
     ros::Publisher latent_pub_;
     sensor_msgs::PointCloud2 latent_msg;
 
+    // transforms
     tf::TransformListener kf_ref_to_map_listener;
     tf::StampedTransform kf_ref_to_map_transform;
 
+    // PCL point cloud for publishing ROS messages
     pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish;
+
+    // global map
+    PointMap map;
 
     // params config
     std::string save_dir;

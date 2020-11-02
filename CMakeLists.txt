@@ -149,6 +149,12 @@ target_link_libraries(grid_subsampling cloud ${catkin_LIBRARIES})
 add_library(himmelsbach src/himmelsbach/himmelsbach.cpp)
 target_link_libraries(himmelsbach cloud ${catkin_LIBRARIES})
 
+add_library(polar_processing src/polar_processing/polar_processing.cpp)
+target_link_libraries(polar_processing cloud ${catkin_LIBRARIES})
+
+add_library(pointmap src/pointmap/pointmap.cpp)
+target_link_libraries(pointmap cloud ${catkin_LIBRARIES})
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -173,6 +179,8 @@ target_link_libraries(himmelsbach cloud ${catkin_LIBRARIES})
    grid_subsampling
    himmelsbach
    cloud
+   pointmap
+   polar_processing
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}
  )
