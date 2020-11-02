@@ -29,6 +29,7 @@
 #include <cmath>
 #include <stdio.h>
 #include <string.h>
+#include "boost/shared_ptr.hpp"
 
 
 #include <time.h>
@@ -108,6 +109,27 @@ public:
 		return *this;
 	}
 };
+
+
+// Point cloud including intensity channel
+class PointXYZI : public PointXYZ {
+public:
+    float intensity;
+    PointXYZI() {x = 0; y = 0; z = 0; intensity = 0;}
+    PointXYZI(float x0, float y0, float z0, float intensity_) {x = x0; y = y0; z = z0; intensity = intensity_;}
+    // array-type accesor
+    float operator [] (int i) const {
+        if (i == 0)
+            return x;
+        else if (i == 1)
+            return y;
+        else if (i == 2)
+            return z;
+        else
+            return intensity;
+    }
+};
+
 
 
 // Point Opperations
@@ -296,6 +318,33 @@ struct PointCloud
 	bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
 
 };
+
+
+// Template for point cloud class
+template <class T>
+class PointCloudTemplate {
+public:
+    std::vector<T> points;
+    uint size() {return points.size();}
+    void resize(uint new_size) {points.resize(new_size);}
+    size_t kdtree_get_point_count() const { return points.size(); }
+    float kdtree_get_pt(const size_t idx, const size_t dim) const {
+        if (dim == 0)
+            return points[idx].x;
+        else if (dim == 1)
+            return points[idx].y;
+        else
+            return points[idx].z;
+    }
+    template <class BBOX> bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
+};
+
+// typedef
+
+typedef PointCloudTemplate<PointXYZI> PointCloudXYZI;
+typedef boost::shared_ptr<PointCloudXYZI> PointCloudXYZIPtr;
+typedef PointCloudTemplate<PointXYZ> PointCloudXYZ;
+typedef boost::shared_ptr<PointCloudXYZ> PointCloudXYZPtr;
 
 
 // Utility function for pointclouds

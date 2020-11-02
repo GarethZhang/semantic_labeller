@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(semantic_labeller)
 
-# Compile as C++11, supported in ROS Kinetic and newer
- add_compile_options(-std=c++11)
+## Compile as C++11, supported in ROS Kinetic and newer
+# add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -14,11 +14,12 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   tf
   tf_conversions
+  pcl_conversions
   message_filters
   eigen_conversions
 )
 
-#find_package(PCL 1.3 REQUIRED COMPONENTS)
+find_package(PCL 1.3 REQUIRED COMPONENTS)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -129,7 +130,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
-#  ${PCL_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 # Declare a C++ library
@@ -144,6 +145,9 @@ target_link_libraries(cloud npm_ply_in npm_ply_out ${catkin_LIBRARIES})
 
 add_library(grid_subsampling src/grid_subsampling/grid_subsampling.cpp)
 target_link_libraries(grid_subsampling cloud ${catkin_LIBRARIES})
+
+add_library(himmelsbach src/himmelsbach/himmelsbach.cpp)
+target_link_libraries(himmelsbach cloud ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -167,8 +171,10 @@ target_link_libraries(grid_subsampling cloud ${catkin_LIBRARIES})
 # Specify libraries to link a library or executable target against
  target_link_libraries(${PROJECT_NAME}_node
    grid_subsampling
+   himmelsbach
    cloud
    ${catkin_LIBRARIES}
+   ${PCL_LIBRARIES}
  )
 
 #############

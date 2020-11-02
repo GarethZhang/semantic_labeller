@@ -18,12 +18,14 @@
 #include <numeric>
 
 #include "grid_subsampling/grid_subsampling.h"
+#include "himmelsbach/himmelsbach.h"
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 #include <geometry_msgs/PoseStamped.h>
 
+#include "pcl_conversions/pcl_conversions.h"
 #include "tf/transform_listener.h"
 #include "tf/transform_broadcaster.h"
 #include "tf/transform_datatypes.h"
@@ -55,11 +57,20 @@ private:
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
 
+    ros::Publisher latent_pub_;
+    sensor_msgs::PointCloud2 latent_msg;
+
+    tf::TransformListener kf_ref_to_map_listener;
+    tf::StampedTransform kf_ref_to_map_transform;
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish;
+
     // params config
     std::string save_dir;
-    std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic;
+    std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
     bool save_to_ply;
     double max_distance;
+    float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
@@ -69,6 +80,8 @@ private:
 
     void velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+
+    void extract_negative(PointCloudXYZPtr cloud, vector<int> &indices);
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match
