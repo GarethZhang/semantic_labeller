@@ -21,6 +21,7 @@
 velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     map_publish(new pcl::PointCloud<pcl::PointXYZ>),
+    map_ground_publish(new pcl::PointCloud<pcl::PointXYZ>),
     velo_sub_(nh_, "/velodyne_points", 10),
     velo_time_seq(velo_sub_, ros::Duration(0.0), ros::Duration(0.01), 10)
     { // constructor
@@ -41,7 +42,7 @@ void velodyne_listener_class::initializeSubscribers() {
     ROS_INFO("Initializing Subscribers");
 //    velo_sub_ = nh_.subscribe("/velodyne_points", 1, &velodyne_listener_class::velodyneCallback, this);
     kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
-//    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
+    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
 
     // add more subscribers here, as needed
 }
@@ -50,6 +51,8 @@ void velodyne_listener_class::initializeSubscribers() {
 void velodyne_listener_class::initializePublishers() {
     ROS_INFO("Initializing Publishers");
 //    pub_ = nh_.advertise<std_msgs::Float32>("exampleMinimalPubTopic", 1, true);
+    map_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/slam_map", 1, true);
+    map_ground_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/slam_map_ground", 1, true);
     latent_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/velo_latent", 1, true);
     //add more publishers, as needed
     // note: COULD make pub_ a public member function, if want to use it within "main()"
@@ -60,6 +63,10 @@ void velodyne_listener_class::initializePublishers() {
 void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     // the real work is done in this callback function
     // it wakes up every time a new message is published on "exampleMinimalSubTopic"
+
+    /////////////////////////////////////////////////////////////
+    // Get latest transform between submap frame and map frame //
+    /////////////////////////////////////////////////////////////
 
     bool available = false;
     if (!available){
@@ -80,8 +87,7 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
 
     // Loop over points and copy in vector container. Do the filtering if necessary
     vector<PointXYZ> kf_ref_velo;
-    vector<PointXYZ> f_pts;
-    f_pts.reserve(N);
+    kf_ref_velo.reserve(N);
     for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
          iter_x != iter_x.end();
          ++iter_x, ++iter_y, ++iter_z)
@@ -102,23 +108,77 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
     Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
     kf_ref_velo_transformed_mat = (R_init * kf_ref_velo_mat).colwise() + T_init;
 
+    //////////////////////////////////////////
+    // Preprocess frame and compute normals //
+    //////////////////////////////////////////
+
+    // Create a copy of points in polar coordinates
+    vector<PointXYZ> polar_pts(kf_ref_velo_transformed);
+    cart2pol_(polar_pts);
+
+    // Get lidar angle resolution
+    float minTheta, maxTheta;
+    float lidar_angle_res = get_lidar_angle_res(polar_pts, minTheta, maxTheta, lidar_n_lines);
+
+    // Define the polar neighbors radius in the scaled polar coordinates
+    float polar_r = 1.5 * lidar_angle_res;
+
+    // Apply log scale to radius coordinate (in place)
+    lidar_log_radius(polar_pts, polar_r, (float)r_scale);
+
+    /////////////////////
+    // Compute normals //
+    /////////////////////
+
+    // Init result containers
+    vector<PointXYZ> normals;
+    vector<float> norm_scores;
+
+    // Apply horizontal scaling (to have smaller neighborhoods in horizontal direction)
+    lidar_horizontal_scale(polar_pts, (float)h_scale);
+
+    // Do not sub-sample. Use all the indices
+    vector<size_t> sub_inds;
+    for (int i = 0; i < kf_ref_velo_transformed.size(); ++i)
+        sub_inds.push_back(i);
+
+    // Call polar processing function
+    extract_lidar_frame_normals(kf_ref_velo_transformed, polar_pts, sub_inds, normals, norm_scores, polar_r);
+
+    // Remove points with a low score
+    filter_pointcloud(kf_ref_velo_transformed, norm_scores, 0.1);
+    filter_pointcloud(normals, norm_scores, 0.1);
+    norm_scores.erase(remove_if(norm_scores.begin(), norm_scores.end(), [](const float s) { return s < 0.1; }), norm_scores.end());
+
+    ////////////////
+    // Add to Map //
+    ////////////////
+
+    // The update function is called only on subsampled points as the others have no normal
+    map.update(kf_ref_velo_transformed, normals, norm_scores);
+
     // Publish ros messages
-    pcl::PointXYZ p;
-    int nr_correspondences = kf_ref_velo_transformed.size();
-    for (int i = 0; i < nr_correspondences; ++i){
-        p.x = kf_ref_velo_transformed[i].x;
-        p.y = kf_ref_velo_transformed[i].y;
-        p.z = kf_ref_velo_transformed[i].z;
-        map_publish->push_back(p);
-    }
+    moveToPCLPtr(map.cloud.pts, map_publish, false);
+    pcl::toROSMsg(*map_publish, map_msg);
+    map_msg.header.frame_id = slamMap_frame;
+    map_msg.header.stamp = msg->header.stamp;
+    map_pub_.publish(map_msg);
 
-    ROS_INFO("ADDING NEW SUBMAP WITH %lu POINTS", map_publish->size());
+//    ROS_INFO("UPDATING NEW SUBMAP WITH %lu POINTS", map_publish->size());
 
-    // publish the ROS messages
-    pcl::toROSMsg(*map_publish, latent_msg);
-    latent_msg.header.frame_id = slamMap_frame;
-    latent_msg.header.stamp = msg->header.stamp;
-    latent_pub_.publish(latent_msg);
+    /////////////////////
+    // Extract Ground  //
+    /////////////////////
+    auto kf_ref_velo_before = kf_ref_velo_transformed.size();
+    vector<PointXYZ> ground = extract_ground_himmelsbach(kf_ref_velo_transformed);
+    ROS_INFO("In KF, keeping %lu / %lu points after removing ground", kf_ref_velo_transformed.size(), kf_ref_velo_before);
+
+    // Publish ros messages
+    moveToPCLPtr(kf_ref_velo_transformed, map_ground_publish, true);
+    pcl::toROSMsg(*map_ground_publish, map_ground_msg);
+    map_ground_msg.header.frame_id = slamMap_frame;
+    map_ground_msg.header.stamp = msg->header.stamp;
+    map_ground_pub_.publish(map_ground_msg);
 }
 
 // a simple callback function, used by the example subscriber.
@@ -131,40 +191,25 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
     // Get the number of points
     size_t N = (size_t)(msg->width * msg->height);
 
-    // Get timestamp
-    ros::Time stamp = msg->header.stamp;
-
     // Loop over points and copy in vector container. Do the filtering if necessary
-    PointCloudXYZPtr velo(new PointCloudXYZ ());
-    vector<PointXYZ> f_pts;
-    f_pts.reserve(N);
+    vector<PointXYZ> velo;
+    velo.reserve(N);
     for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
          iter_x != iter_x.end();
          ++iter_x, ++iter_y, ++iter_z)
     {
         // Add all points to the vector container
-        velo->points.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
+        velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
     }
 
     // Remove ground plane using Himmelsbach
-    Himmelsbach himmelsbach(velo);
-    himmelsbach.set_alpha(alpha);
-    himmelsbach.set_tolerance(tolerance);
-    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev);
-    std::vector<int> inliers;
-    himmelsbach.compute_model_and_get_inliers(inliers);
-    extract_negative(velo, inliers);
+    auto velo_size_before = velo.size();
+    vector<PointXYZ> ground = extract_ground_himmelsbach(velo);
+    ROS_INFO("In Velodyne, keeping %lu / %lu points after removing ground", velo.size(), velo_size_before);
 
     // Publish ros messages
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_publish (new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointXYZ p;
-    int nr_correspondences = velo->size();
-    for (int i = 0; i < nr_correspondences; ++i){
-        p.x = velo->points[i].x;
-        p.y = velo->points[i].y;
-        p.z = velo->points[i].z;
-        cloud_publish->push_back(p);
-    }
+    moveToPCLPtr(velo, cloud_publish, false);
 
     // publish the ROS messages
     pcl::toROSMsg(*cloud_publish, latent_msg);
@@ -178,6 +223,10 @@ void velodyne_listener_class::getParams() {
     nh_.param<bool>("save_to_ply", save_to_ply, true);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
+
+    nh_.param<int>("lidar_n_lines", lidar_n_lines, 1.0);
+    nh_.param<double>("r_scale", r_scale, 1.0);
+    nh_.param<double>("h_scale", h_scale, 1.0);
 
     nh_.param<float>("alpha", alpha, 1.0);
     nh_.param<float>("tolerance", tolerance, 1.0);
@@ -195,19 +244,127 @@ void velodyne_listener_class::getParams() {
     nh_.param<std::string>("velodyne_topic", velodyne_topic, "/velodyne_points");
 }
 
-void velodyne_listener_class::extract_negative(PointCloudXYZPtr cloud, std::vector<int> &indices) {
+vector<PointXYZ> velodyne_listener_class::extract_negative(std::vector<PointXYZ> &cloud, std::vector<int> &indices) {
     std::sort(indices.begin(), indices.end());
     std::vector<int> inverse;
-    for (uint i = 0; i < cloud->size(); i++) {
-        if (std::binary_search(indices.begin(), indices.end(), i))
+    std::vector<PointXYZ> ground;
+    for (uint i = 0; i < cloud.size(); i++) {
+        if (std::binary_search(indices.begin(), indices.end(), i)){
+            ground.push_back(cloud[i]);
             continue;
+        }
         inverse.push_back(i);
     }
     std::sort(inverse.begin(), inverse.end());
     for (uint i = 0; i < inverse.size(); i++) {
-        cloud->points[i] = cloud->points[inverse[i]];
+        cloud[i] = cloud[inverse[i]];
     }
-    cloud->resize(inverse.size());
+    cloud.resize(inverse.size());
+    return ground;
+}
+
+vector<PointXYZ> velodyne_listener_class::extract_ground_himmelsbach(vector<PointXYZ> &cloud) {
+    Himmelsbach himmelsbach(cloud);
+    himmelsbach.set_alpha(alpha);
+    himmelsbach.set_tolerance(tolerance);
+    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev);
+    std::vector<int> inliers;
+    himmelsbach.compute_model_and_get_inliers(inliers);
+    vector<PointXYZ> ground = extract_negative(cloud, inliers);
+
+    return ground;
+}
+
+vector<PointXYZ> velodyne_listener_class::extract_ground(vector<PointXYZ> &points,
+                                                vector<PointXYZ> &normals,
+                                                float angle_vertical_thresh,
+                                                float dist_thresh,
+                                                int max_iter,
+                                                bool mode_2D)
+{
+
+//    // In case of 2D mode, take the minimum height and use vertical normal
+//    if (mode_2D)
+//    {
+//        PointXYZ A = points[0];
+//        for (auto& p: points)
+//        {
+//            if (p.z < A.z)
+//                A = p;
+//        }
+//        return Plane3D(A, PointXYZ(0, 0, 1));
+//
+//    }
+
+    // Get the points with vertical normal (angle_vertical_thresh should be in radians)
+    vector<PointXYZ> valid_points;
+    valid_points.reserve(points.size());
+    size_t i = 0;
+    float cos_thresh = cos(angle_vertical_thresh);
+    for (auto& n: normals)
+    {
+        if (abs(n.z) > cos_thresh)
+        {
+            valid_points.push_back(points[i]);
+        }
+        i++;
+    }
+
+    // Random generator
+    default_random_engine generator;
+    uniform_int_distribution<size_t> distribution(0, valid_points.size() - 1);
+
+    // RANSAC loop
+    int best_votes = 0;
+    Plane3D best_P;
+    vector<PointXYZ> best_outliers;
+    for (int i = 0; i < max_iter; i++)
+    {
+        // Draw 3 random points
+        unordered_set<size_t> unique_inds;
+        vector<PointXYZ> ABC, outliers;
+        while (unique_inds.size() < 3)
+        {
+            size_t ind = distribution(generator);
+            unique_inds.insert(ind);
+            if (unique_inds.size() > ABC.size())
+                ABC.push_back(valid_points[ind]);
+        }
+
+        // Get the corresponding plane
+        Plane3D candidate_P(ABC[0], ABC[1], ABC[2]);
+
+        // Avoid ill defined planes
+        if (candidate_P.u.sq_norm() < 1e-5)
+        {
+            i--;
+            continue;
+        }
+
+        // Get the number of votes for this plane
+        int votes = candidate_P.in_range(valid_points, dist_thresh, outliers);
+
+        // Save best plane
+        if (votes > best_votes)
+        {
+            best_votes = votes;
+            best_P = candidate_P;
+            best_outliers = outliers;
+        }
+    }
+    return best_outliers;
+}
+
+void velodyne_listener_class::moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, bool update) {
+    if (!update)
+        PCL_cloud_ptr->clear();
+    pcl::PointXYZ p;
+    for (int i = 0; i < cloud.size(); ++i){
+        p.x = cloud[i].x;
+        p.y = cloud[i].y;
+        p.z = cloud[i].z;
+        PCL_cloud_ptr->push_back(p);
+    }
 }
 
 

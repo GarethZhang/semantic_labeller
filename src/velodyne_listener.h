@@ -59,15 +59,15 @@ private:
     message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
     message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
 
-    ros::Publisher latent_pub_;
-    sensor_msgs::PointCloud2 latent_msg;
+    ros::Publisher map_pub_, map_ground_pub_, latent_pub_;
+    sensor_msgs::PointCloud2 map_msg, map_ground_msg, latent_msg;
 
     // transforms
     tf::TransformListener kf_ref_to_map_listener;
     tf::StampedTransform kf_ref_to_map_transform;
 
     // PCL point cloud for publishing ROS messages
-    pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish, map_ground_publish;
 
     // global map
     PointMap map;
@@ -76,8 +76,9 @@ private:
     std::string save_dir;
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
     bool save_to_ply;
-    double max_distance;
+    double max_distance, r_scale, h_scale;
     float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev;
+    int lidar_n_lines;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
@@ -88,7 +89,15 @@ private:
     void velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void kfRefCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
 
-    void extract_negative(PointCloudXYZPtr cloud, vector<int> &indices);
+    vector<PointXYZ> extract_negative(std::vector<PointXYZ> &cloud, std::vector<int> &indices);
+
+    vector<PointXYZ> extract_ground_himmelsbach(vector<PointXYZ> &cloud);
+
+    void moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, bool update);
+
+    vector<PointXYZ>
+    extract_ground(vector<PointXYZ> &points, vector<PointXYZ> &normals, float angle_vertical_thresh = M_PI / 6, float dist_thresh = 0.1,
+                   int max_iter = 200, bool mode_2D = false);
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match

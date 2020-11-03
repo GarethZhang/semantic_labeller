@@ -21,17 +21,17 @@
 #include "himmelsbach.h"
 
 
-Line::Line(PointCloudXYZPtr pc, std::vector<int> line_set, float m_, float b_) {
+Line::Line(std::vector<PointXYZ> pc, std::vector<int> line_set, float m_, float b_) {
     int idx = line_set[0];
-    start = sqrt(pow(pc->points[idx].x, 2) + pow(pc->points[idx].y, 2));
+    start = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
     idx = line_set[line_set.size() - 1];
-    end = sqrt(pow(pc->points[idx].x, 2) + pow(pc->points[idx].y, 2));
+    end = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
     m = m_;
     b = b_;
 }
 
 void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
-    if (pc->size() == 0)
+    if (pc.size() == 0)
         return;
     // Sort points into segments
     std::vector<std::vector<int>> segments;
@@ -73,7 +73,7 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
         }
         // Assign points as inliers if they are within a treshold of the ground model
         for (int idx : segment) {
-            float r = sqrt(pow(pc->points[i].x, 2) + pow(pc->points[i].y, 2));
+            float r = sqrt(pow(pc[i].x, 2) + pow(pc[i].y, 2));
             // get line that's closest to the candidate point based on distance to endpoints
             int closest = -1;
             float dmin = 10000;
@@ -100,8 +100,8 @@ void Himmelsbach::sort_points_segments(std::vector<std::vector<int>> &segments) 
     for (int i = 0; i < num_segments; i++) {
         segments.push_back(dummy);
     }
-    for (uint i = 0; i < pc->size(); i++) {
-        float angle = atan2(pc->points[i].y, pc->points[i].x);
+    for (uint i = 0; i < pc.size(); i++) {
+        float angle = atan2(pc[i].y, pc[i].x);
         if (angle < 0)
             angle = angle + 2 * M_PI;
         int segment = int(angle / alpha);
@@ -117,7 +117,7 @@ void Himmelsbach::sort_points_bins(std::vector<int> segment, std::vector<int> &b
     }
     float rsmall = rmin + bin_size_small * num_bins_small;
     for (int idx : segment) {
-        float r = sqrt(pow(pc->points[idx].x, 2) + pow(pc->points[idx].y, 2));
+        float r = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
         int bin = -1;
         if (rmin <= r && r < rsmall)
             bin = (r - rmin) / bin_size_small;
@@ -133,8 +133,8 @@ void Himmelsbach::sort_points_bins(std::vector<int> segment, std::vector<int> &b
         float zmin = 10000;
         int lowest = -1;
         for (int idx : bin_points) {
-            if (pc->points[idx].z < zmin) {
-                zmin = pc->points[idx].z;
+            if (pc[idx].z < zmin) {
+                zmin = pc[idx].z;
                 lowest = idx;
             }
         }
@@ -148,9 +148,9 @@ float Himmelsbach::fitline(std::vector<int> line_set, float &m, float &b) {
     Eigen::VectorXf B = Eigen::VectorXf::Zero(line_set.size());
     for (uint i = 0; i < line_set.size(); i++) {
         int idx = line_set[i];
-        A(i, 0) = sqrt(pow(pc->points[idx].x, 2) + pow(pc->points[idx].y, 2));
+        A(i, 0) = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
         A(i, 1) = 1;
-        B(i) = pc->points[idx].z;
+        B(i) = pc[idx].z;
     }
     Eigen::VectorXf x = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(B);
     m = x(0);
@@ -165,8 +165,8 @@ float Himmelsbach::fitline(std::vector<int> line_set, int idx, float &m, float &
 }
 
 float Himmelsbach::distpointline(Line line, int idx) {
-    float r = sqrt(pow(pc->points[idx].x, 2) + pow(pc->points[idx].y, 2));
-    return fabs(pc->points[idx].z - line.m * r - line.b) / sqrt(1 + pow(line.m, 2));
+    float r = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
+    return fabs(pc[idx].z - line.m * r - line.b) / sqrt(1 + pow(line.m, 2));
 }
 
 

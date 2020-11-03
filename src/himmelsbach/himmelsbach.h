@@ -14,7 +14,7 @@ struct Line {
     float b;
     float start;
     float end;
-    Line(PointCloudXYZPtr pc, std::vector<int> line_set, float m_, float b_);
+    Line(std::vector<PointXYZ> pc, std::vector<int> line_set, float m_, float b_);
 };
 
 //* Himmelsbach
@@ -23,7 +23,7 @@ struct Line {
 */
 class Himmelsbach {
 public:
-    explicit Himmelsbach(PointCloudXYZPtr pc_) : pc(pc_) {}
+    explicit Himmelsbach(std::vector<PointXYZ> pc_) : pc(pc_) {}
     void set_alpha(float alpha_) {alpha = alpha_;}
     void set_tolerance(float tolerance_) {tolerance = tolerance_;}
     void set_thresholds(float Tm_, float Tm_small_, float Tb_, float Trmse_, float Tdprev_) {
@@ -41,7 +41,7 @@ public:
     void compute_model_and_get_inliers(std::vector<int> &inliers);
 
 private:
-    PointCloudXYZPtr pc;
+    std::vector<PointXYZ> pc;
     float alpha = 5 * M_PI / 180;       /*!< Number of segments = (2 * M_PI) / alpha */
     int num_bins_small = 120;
     int num_bins_large = 54;

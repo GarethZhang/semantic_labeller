@@ -444,6 +444,20 @@ public:
 		}
 		return count;
 	}
+
+    int in_range(std::vector<PointXYZ>& points, float threshold, std::vector<PointXYZ>& outliers)
+    {
+        int count = 0;
+        float inv_norm_u = 1 / std::sqrt(u.sq_norm());
+        for (auto& p : points)
+        {
+            if (std::abs((u.dot(p) - d) * inv_norm_u) < threshold)
+                count++;
+            else
+                outliers.push_back(p);
+        }
+        return count;
+    }
 };
 
 
