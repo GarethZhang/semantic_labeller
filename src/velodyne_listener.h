@@ -98,6 +98,8 @@ private:
     vector<PointXYZ>
     extract_ground(vector<PointXYZ> &points, vector<PointXYZ> &normals, float angle_vertical_thresh = M_PI / 6, float dist_thresh = 0.1,
                    int max_iter = 200, bool mode_2D = false);
+
+    std::string configureDataPath(const char keyString[5], unsigned int seq, uint64_t sec);
 }; // note: a class definition requires a semicolon at the end of the definition
 
 #endif  // this closes the header-include trick...ALWAYS need one of these to match

@@ -157,14 +157,16 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
     // The update function is called only on subsampled points as the others have no normal
     map.update(kf_ref_velo_transformed, normals, norm_scores);
 
+    // save out map
+    std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
+    save_cloud(save_str, map.cloud.pts, map.normals);
+
     // Publish ros messages
     moveToPCLPtr(map.cloud.pts, map_publish, false);
     pcl::toROSMsg(*map_publish, map_msg);
     map_msg.header.frame_id = slamMap_frame;
     map_msg.header.stamp = msg->header.stamp;
     map_pub_.publish(map_msg);
-
-//    ROS_INFO("UPDATING NEW SUBMAP WITH %lu POINTS", map_publish->size());
 
     /////////////////////
     // Extract Ground  //
@@ -365,6 +367,13 @@ void velodyne_listener_class::moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCl
         p.z = cloud[i].z;
         PCL_cloud_ptr->push_back(p);
     }
+}
+
+std::string velodyne_listener_class::configureDataPath(const char *keyString, unsigned int seq, uint64_t sec) {
+    std::ostringstream dataPath;
+    dataPath.str(""); dataPath.clear();
+    dataPath << save_dir << keyString << "_" << seq << "_" << sec<< ".ply";
+    return dataPath.str();
 }
 
 
