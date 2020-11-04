@@ -63,8 +63,10 @@ private:
     sensor_msgs::PointCloud2 map_msg, map_ground_msg, latent_msg;
 
     // transforms
-    tf::TransformListener kf_ref_to_map_listener;
-    tf::StampedTransform kf_ref_to_map_transform;
+    tf::TransformListener kf_ref_to_map_listener, velo_to_map_listener;
+    tf::StampedTransform kf_ref_to_map_transform, velo_to_map_transform;
+
+    ofstream pose_file;
 
     // PCL point cloud for publishing ROS messages
     pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish, map_ground_publish;

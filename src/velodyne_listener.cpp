@@ -23,12 +23,17 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     map_publish(new pcl::PointCloud<pcl::PointXYZ>),
     map_ground_publish(new pcl::PointCloud<pcl::PointXYZ>),
     velo_sub_(nh_, "/velodyne_points", 10),
-    velo_time_seq(velo_sub_, ros::Duration(0.0), ros::Duration(0.01), 10)
+    velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 10)
     { // constructor
     ROS_INFO("in class constructor of velodyne_listener_class");
     getParams();
     initializeSubscribers(); // package up the messy work of creating subscribers; do this overhead in constructor
     initializePublishers();
+
+    std::ostringstream pose_fname;
+    pose_fname.str(""); pose_fname.clear();
+    pose_fname << save_dir << "map_poses"<< ".txt";
+    pose_file.open (pose_fname.str());
 
     //initialize variables here, as needed
 
@@ -41,7 +46,7 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
 void velodyne_listener_class::initializeSubscribers() {
     ROS_INFO("Initializing Subscribers");
 //    velo_sub_ = nh_.subscribe("/velodyne_points", 1, &velodyne_listener_class::velodyneCallback, this);
-    kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
+//    kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
     velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
 
     // add more subscribers here, as needed
@@ -158,29 +163,34 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
     map.update(kf_ref_velo_transformed, normals, norm_scores);
 
     // save out map
-    std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
-    save_cloud(save_str, map.cloud.pts, map.normals);
+    std::string save_str = configureDataPath("map", msg->header.seq, msg->header.stamp.toNSec());
+    vector<float> features;
+    for (auto score:map.scores)
+        features.push_back(score);
+    for (auto count:map.counts)
+        features.push_back(count);
+    save_cloud(save_str, map.cloud.pts, map.normals, features);
 
-    // Publish ros messages
-    moveToPCLPtr(map.cloud.pts, map_publish, false);
-    pcl::toROSMsg(*map_publish, map_msg);
-    map_msg.header.frame_id = slamMap_frame;
-    map_msg.header.stamp = msg->header.stamp;
-    map_pub_.publish(map_msg);
-
-    /////////////////////
-    // Extract Ground  //
-    /////////////////////
-    auto kf_ref_velo_before = kf_ref_velo_transformed.size();
-    vector<PointXYZ> ground = extract_ground_himmelsbach(kf_ref_velo_transformed);
-    ROS_INFO("In KF, keeping %lu / %lu points after removing ground", kf_ref_velo_transformed.size(), kf_ref_velo_before);
-
-    // Publish ros messages
-    moveToPCLPtr(kf_ref_velo_transformed, map_ground_publish, true);
-    pcl::toROSMsg(*map_ground_publish, map_ground_msg);
-    map_ground_msg.header.frame_id = slamMap_frame;
-    map_ground_msg.header.stamp = msg->header.stamp;
-    map_ground_pub_.publish(map_ground_msg);
+//    // Publish ros messages
+//    moveToPCLPtr(map.cloud.pts, map_publish, false);
+//    pcl::toROSMsg(*map_publish, map_msg);
+//    map_msg.header.frame_id = slamMap_frame;
+//    map_msg.header.stamp = msg->header.stamp;
+//    map_pub_.publish(map_msg);
+//
+//    /////////////////////
+//    // Extract Ground  //
+//    /////////////////////
+//    auto kf_ref_velo_before = kf_ref_velo_transformed.size();
+//    vector<PointXYZ> ground = extract_ground_himmelsbach(kf_ref_velo_transformed);
+//    ROS_INFO("In KF, keeping %lu / %lu points after removing ground", kf_ref_velo_transformed.size(), kf_ref_velo_before);
+//
+//    // Publish ros messages
+//    moveToPCLPtr(kf_ref_velo_transformed, map_ground_publish, true);
+//    pcl::toROSMsg(*map_ground_publish, map_ground_msg);
+//    map_ground_msg.header.frame_id = slamMap_frame;
+//    map_ground_msg.header.stamp = msg->header.stamp;
+//    map_ground_pub_.publish(map_ground_msg);
 }
 
 // a simple callback function, used by the example subscriber.
@@ -190,34 +200,41 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
     // Read point cloud message //
     //////////////////////////////
 
-    // Get the number of points
-    size_t N = (size_t)(msg->width * msg->height);
+//    // Get the number of points
+//    size_t N = (size_t)(msg->width * msg->height);
+//
+//    // Loop over points and copy in vector container. Do the filtering if necessary
+//    vector<PointXYZ> velo;
+//    velo.reserve(N);
+//    for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
+//         iter_x != iter_x.end();
+//         ++iter_x, ++iter_y, ++iter_z)
+//    {
+//        // Add all points to the vector container
+//        velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
+//    }
+//
+//    // save out every frame of point cloud
+//    std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
+//    save_cloud(save_str, velo);
 
-    // Loop over points and copy in vector container. Do the filtering if necessary
-    vector<PointXYZ> velo;
-    velo.reserve(N);
-    for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
-         iter_x != iter_x.end();
-         ++iter_x, ++iter_y, ++iter_z)
-    {
-        // Add all points to the vector container
-        velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
+    if (true){
+        try{
+            velo_to_map_listener.lookupTransform(slamMap_frame, velodyne_frame,
+                                                 msg->header.stamp, velo_to_map_transform);
+            ROS_INFO("%lu", msg->header.stamp.toNSec());
+
+            pose_file << msg->header.stamp.toNSec() << " " << velo_to_map_transform.getBasis().getRow(0).x() << " " << velo_to_map_transform.getBasis().getRow(0).y() << " " <<
+                      velo_to_map_transform.getBasis().getRow(0).z() << " " << velo_to_map_transform.getBasis().getRow(1).x() << " " <<
+                      velo_to_map_transform.getBasis().getRow(1).y() << " " << velo_to_map_transform.getBasis().getRow(1).z() << " " <<
+                      velo_to_map_transform.getBasis().getRow(2).x() << " " << velo_to_map_transform.getBasis().getRow(2).y() << " " <<
+                      velo_to_map_transform.getBasis().getRow(2).z() << " " << velo_to_map_transform.getOrigin().x() << " " <<
+                      velo_to_map_transform.getOrigin().y() << " " << velo_to_map_transform.getOrigin().z() << "\n";
+        }
+        catch (tf::TransformException ex){
+            ROS_ERROR("%s",ex.what());
+        }
     }
-
-    // Remove ground plane using Himmelsbach
-    auto velo_size_before = velo.size();
-    vector<PointXYZ> ground = extract_ground_himmelsbach(velo);
-    ROS_INFO("In Velodyne, keeping %lu / %lu points after removing ground", velo.size(), velo_size_before);
-
-    // Publish ros messages
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_publish (new pcl::PointCloud<pcl::PointXYZ>);
-    moveToPCLPtr(velo, cloud_publish, false);
-
-    // publish the ROS messages
-    pcl::toROSMsg(*cloud_publish, latent_msg);
-    latent_msg.header.frame_id = msg->header.frame_id;
-    latent_msg.header.stamp = msg->header.stamp;
-    latent_pub_.publish(latent_msg);
 }
 
 void velodyne_listener_class::getParams() {
