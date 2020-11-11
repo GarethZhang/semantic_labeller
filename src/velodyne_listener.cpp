@@ -22,8 +22,8 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     map_publish(new pcl::PointCloud<pcl::PointXYZ>),
     map_ground_publish(new pcl::PointCloud<pcl::PointXYZ>),
-    velo_sub_(nh_, "/velodyne_points", 10),
-    velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 10)
+    velo_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 1000),
+    velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 1000)
     { // constructor
     ROS_INFO("in class constructor of velodyne_listener_class");
     getParams();
@@ -196,44 +196,174 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
 // a simple callback function, used by the example subscriber.
 // note, though, use of member variables and access to pub_ (which is a member method)
 void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
-    //////////////////////////////
-    // Read point cloud message //
-    //////////////////////////////
 
-//    // Get the number of points
-//    size_t N = (size_t)(msg->width * msg->height);
-//
-//    // Loop over points and copy in vector container. Do the filtering if necessary
-//    vector<PointXYZ> velo;
-//    velo.reserve(N);
-//    for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
-//         iter_x != iter_x.end();
-//         ++iter_x, ++iter_y, ++iter_z)
-//    {
-//        // Add all points to the vector container
-//        velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
-//    }
-//
-//    // save out every frame of point cloud
-//    std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
-//    save_cloud(save_str, velo);
+    //////////////////////////////////////
+    // Listen to Velodyne to Map transform
+    //////////////////////////////////////
+    bool available = false;
+    try {
+        velo_to_map_listener.lookupTransform(slamMap_frame, velodyne_frame,
+                                             msg->header.stamp, velo_to_map_transform);
+        ROS_INFO("%lu", msg->header.stamp.toNSec());
+        available = true;
+    }
+    catch (tf::TransformException ex) {
+        ROS_ERROR("%s", ex.what());
+    }
 
-    if (true){
-        try{
-            velo_to_map_listener.lookupTransform(slamMap_frame, velodyne_frame,
-                                                 msg->header.stamp, velo_to_map_transform);
-            ROS_INFO("%lu", msg->header.stamp.toNSec());
-
-            pose_file << msg->header.stamp.toNSec() << " " << velo_to_map_transform.getBasis().getRow(0).x() << " " << velo_to_map_transform.getBasis().getRow(0).y() << " " <<
-                      velo_to_map_transform.getBasis().getRow(0).z() << " " << velo_to_map_transform.getBasis().getRow(1).x() << " " <<
-                      velo_to_map_transform.getBasis().getRow(1).y() << " " << velo_to_map_transform.getBasis().getRow(1).z() << " " <<
-                      velo_to_map_transform.getBasis().getRow(2).x() << " " << velo_to_map_transform.getBasis().getRow(2).y() << " " <<
-                      velo_to_map_transform.getBasis().getRow(2).z() << " " << velo_to_map_transform.getOrigin().x() << " " <<
+    if (available) {
+        //////////////////////////
+        // Save transforms in .txt
+        //////////////////////////
+        if (save_velo_to_map)
+            pose_file << msg->header.stamp.toNSec() << " " << velo_to_map_transform.getBasis().getRow(0).x() << " "
+                      << velo_to_map_transform.getBasis().getRow(0).y() << " " <<
+                      velo_to_map_transform.getBasis().getRow(0).z() << " "
+                      << velo_to_map_transform.getBasis().getRow(1).x() << " " <<
+                      velo_to_map_transform.getBasis().getRow(1).y() << " "
+                      << velo_to_map_transform.getBasis().getRow(1).z() << " " <<
+                      velo_to_map_transform.getBasis().getRow(2).x() << " "
+                      << velo_to_map_transform.getBasis().getRow(2).y() << " " <<
+                      velo_to_map_transform.getBasis().getRow(2).z() << " " << velo_to_map_transform.getOrigin().x()
+                      << " " <<
                       velo_to_map_transform.getOrigin().y() << " " << velo_to_map_transform.getOrigin().z() << "\n";
+
+        //////////////////////////////
+        // Read point cloud message //
+        //////////////////////////////
+        // Get the number of points
+        size_t N = (size_t) (msg->width * msg->height);
+
+        // Loop over points and copy in vector container. Do the filtering if necessary
+        vector<PointXYZ> velo;
+        velo.reserve(N);
+        for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
+             iter_x != iter_x.end();
+             ++iter_x, ++iter_y, ++iter_z) {
+            // Add all points to the vector container
+            velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
         }
-        catch (tf::TransformException ex){
-            ROS_ERROR("%s",ex.what());
+
+        // save out every frame of point cloud
+        if (save_velo) {
+            std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
+            save_cloud(save_str, velo);
         }
+
+        if (save_buffer || save_pointmap){
+            // create a copy of the point cloud vector
+            vector<PointXYZ> velo_transformed(velo);
+
+            // Matrix for original/aligned data (Shallow copy of parts of the points vector)
+            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_mat((float *) velo.data(), 3, N);
+            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_transformed_mat((float *) velo_transformed.data(), 3, N);
+
+            // Apply initial transformation
+            //    transformFromTFTransform(velo_mat, velo_transformed_mat, velo_to_map_transform);
+            Eigen::Affine3d eigenTr;
+            tf::transformTFToEigen(velo_to_map_transform, eigenTr);
+            Eigen::Matrix3f R_init = (eigenTr.matrix().block(0, 0, 3, 3)).cast<float>();
+            Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
+            velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
+
+            //////////////////////////////////////////
+            // Preprocess frame and compute normals //
+            //////////////////////////////////////////
+
+
+            //////////////////////////////////////////
+            // Preprocess frame and compute normals //
+            //////////////////////////////////////////
+
+            // Create a copy of points in polar coordinates
+            vector<PointXYZ> polar_pts(velo_transformed);
+            cart2pol_(polar_pts);
+
+            // Get lidar angle resolution
+            float minTheta, maxTheta;
+            float lidar_angle_res = get_lidar_angle_res(polar_pts, minTheta, maxTheta, lidar_n_lines);
+
+            // Define the polar neighbors radius in the scaled polar coordinates
+            float polar_r = 1.5 * lidar_angle_res;
+
+            // Apply log scale to radius coordinate (in place)
+            lidar_log_radius(polar_pts, polar_r, (float) r_scale);
+
+            vector<PointXYZ> sub_pts;
+            vector<size_t> sub_inds;
+            grid_subsampling_centers(velo_transformed, sub_pts, sub_inds, (float) frame_voxel_size);
+
+            /////////////////////
+            // Compute normals //
+            /////////////////////
+
+            // Init result containers
+            vector<PointXYZ> normals;
+            vector<float> norm_scores;
+
+            // Apply horizontal scaling (to have smaller neighborhoods in horizontal direction)
+            lidar_horizontal_scale(polar_pts, (float) h_scale);
+
+            // Call polar processing function
+            extract_lidar_frame_normals(velo_transformed, polar_pts, sub_inds, normals, norm_scores, polar_r);
+
+            int count = 0;
+            for (int i = 0; i < norm_scores.size(); ++i) {
+                if (norm_scores[i] > 0) {
+                    count++;
+                }
+            }
+            ROS_INFO("COUNT: %d", count);
+
+            /////////////////////////////
+            // Save buffer point cloud //
+            /////////////////////////////
+            if (save_buffer) {
+                buffer_map.update(sub_pts, normals, norm_scores);
+
+                // save out map
+                std::string buffer_map_save_str = configureDataPath("buffer_map", msg->header.seq, msg->header.stamp.toNSec());
+                vector<float> buffer_map_features;
+                for (auto score:buffer_map.scores)
+                    buffer_map_features.push_back(score);
+                for (auto count:buffer_map.counts)
+                    buffer_map_features.push_back(count);
+                save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
+            }
+
+            long int before_size = sub_pts.size();
+
+            // Remove points with a low score
+            filter_pointcloud(sub_pts, norm_scores, 0.1);
+            filter_pointcloud(normals, norm_scores, 0.1);
+            norm_scores.erase(remove_if(norm_scores.begin(), norm_scores.end(), [](const float s) { return s < 0.1; }),
+                              norm_scores.end());
+
+            ROS_INFO("BEFORE: %lu | AFTER: %lu", before_size, sub_pts.size());
+            ////////////////
+            // Add to Map //
+            ////////////////
+
+            // The update function is called only on subsampled points as the others have no normal
+            if (save_pointmap) {
+                map.update(sub_pts, normals, norm_scores);
+
+                // save out map
+                std::string map_save_str = configureDataPath("map", msg->header.seq, msg->header.stamp.toNSec());
+                vector<float> map_features;
+                for (auto score:map.scores)
+                    map_features.push_back(score);
+                for (auto count:map.counts)
+                    map_features.push_back(count);
+                save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
+            }
+        }
+        else{
+            ROS_INFO("Skip map creation...");
+        }
+    }
+    else{
+        ROS_INFO("Transform not ready yet...");
     }
 }
 
@@ -243,9 +373,15 @@ void velodyne_listener_class::getParams() {
 
     nh_.param<double>("max_distance", max_distance, 1.0);
 
+    nh_.param<bool>("save_velo", save_velo, true);
+    nh_.param<bool>("save_velo_to_map", save_velo_to_map, true);
+    nh_.param<bool>("save_pointmap", save_pointmap, true);
+    nh_.param<bool>("save_buffer", save_buffer, true);
+
     nh_.param<int>("lidar_n_lines", lidar_n_lines, 1.0);
     nh_.param<double>("r_scale", r_scale, 1.0);
     nh_.param<double>("h_scale", h_scale, 1.0);
+    nh_.param<double>("frame_voxel_size", frame_voxel_size, 1.0);
 
     nh_.param<float>("alpha", alpha, 1.0);
     nh_.param<float>("tolerance", tolerance, 1.0);

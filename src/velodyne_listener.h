@@ -72,13 +72,13 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish, map_ground_publish;
 
     // global map
-    PointMap map;
+    PointMap map, buffer_map;
 
     // params config
     std::string save_dir;
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
-    bool save_to_ply;
-    double max_distance, r_scale, h_scale;
+    bool save_to_ply, save_velo, save_velo_to_map, save_pointmap, save_buffer;
+    double max_distance, r_scale, h_scale, frame_voxel_size;
     float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev;
     int lidar_n_lines;
 

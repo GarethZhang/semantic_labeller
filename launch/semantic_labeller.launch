@@ -13,14 +13,28 @@
   <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
 
   <arg name="save_to_ply" default="false"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/listener/"/>
+
+  <!--  get map and buffer map .ply-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session/"/>-->
+
+<!--  &lt;!&ndash;  get velodyne scan .ply&ndash;&gt;-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session/"/>-->
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session/"/>
 
   <arg name="max_distance" default="1.0"/>
+
+  <!--  pointmap params for saving out point cloud-->
+  <arg name="save_velo" default="true"/> <!--  save velodyne frames in Frame velodyne-->
+  <arg name="save_velo_to_map" default="false"/> <!--  save transformation from Frame velodyne to Frame map-->
+  <arg name="save_pointmap" default="false"/> <!--  save pointmap map-->
+  <arg name="save_buffer" default="false"/> <!--  save buffer that is an aggregate of velodyne frames-->
 
   <!--  submap point cloud pre-processing params-->
   <arg name="lidar_n_lines" default="128"/>
   <arg name="r_scale" default="4.0"/>
   <arg name="h_scale" default="0.5"/>
+  <arg name="frame_voxel_size" default="0.16"/>
 
   <arg name="alpha" default="0.0873"/> <!--  Number of segments = (2 * M_PI) / alpha-->
   <arg name="tolerance" default="0.25"/> <!--  Metric distance from the ground plane to be considered a ground point-->
@@ -48,9 +62,15 @@
 
     <param name="max_distance" type="double" value="$(arg max_distance)"/>
 
+    <param name="save_velo" type="bool" value="$(arg save_velo)"/>
+    <param name="save_velo_to_map" type="bool" value="$(arg save_velo_to_map)"/>
+    <param name="save_pointmap" type="bool" value="$(arg save_pointmap)"/>
+    <param name="save_buffer" type="bool" value="$(arg save_buffer)"/>
+
     <param name="lidar_n_lines" type="int" value="$(arg lidar_n_lines)"/>
     <param name="r_scale" type="double" value="$(arg r_scale)"/>
     <param name="h_scale" type="double" value="$(arg h_scale)"/>
+    <param name="frame_voxel_size" type="double" value="$(arg frame_voxel_size)"/>
 
     <param name="alpha" type="double" value="$(arg alpha)"/>
     <param name="tolerance" type="double" value="$(arg tolerance)"/>
