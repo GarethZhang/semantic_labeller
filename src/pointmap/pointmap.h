@@ -304,6 +304,8 @@ public:
 	vector<PointXYZ> normals;
 	vector<float> scores;
 	vector<int> counts;
+	vector<double> ground_scores;
+	vector<int> ground_counts;
 
 	// Sparse hashmap that contain voxels (each voxel data is in the contiguous vector containers)
 	unordered_map<VoxKey, size_t> samples;
@@ -344,6 +346,10 @@ public:
 			update(init_points, init_normals, init_scores);
 	}
 
+	void set_map_dl(const float map_dl){
+	    dl = map_dl;
+	}
+
 	// Size of the map (number of point/voxel in the map)
 	size_t size() { return cloud.pts.size(); }
 
@@ -360,6 +366,20 @@ public:
 		scores.push_back(s0);
 	}
 
+    void init_sample(const VoxKey &k, const PointXYZ &p0, const PointXYZ &n0, const float &s0, const bool &f0)
+    {
+        // We place anew key in the hashmap
+        samples.emplace(k, cloud.pts.size());
+
+        // We add new voxel data but initiate only the centroid
+        cloud.pts.push_back(p0);
+        counts.push_back(1);
+        normals.push_back(n0);
+        scores.push_back(s0);
+        ground_scores.push_back((double)f0);
+        ground_counts.push_back(1);
+    }
+
 	// Update of voxel centroid
 	void update_sample(const size_t idx, const PointXYZ &p0, const PointXYZ &n0, const float &s0)
 	{
@@ -372,7 +392,19 @@ public:
 		}
 	}
 
-	void update_limits(const VoxKey &k)
+    void update_sample(const size_t idx, const PointXYZ &p0, const PointXYZ &n0, const float &s0, const bool &f0)
+    {
+        // Update only count for optional removal count of points and centroid of the cell
+        counts[idx] += 1;
+        if (scores[idx] == -1.0 && s0 > scores[idx])
+        {
+            scores[idx] = s0;
+            normals[idx] = n0;
+        }
+        ground_scores[idx] += (double)f0;
+    }
+
+    void update_limits(const VoxKey &k)
 	{
 		if (k.x < minVox.x)
 			minVox.x = k.x;
@@ -445,6 +477,62 @@ public:
 		// Update tree
 		tree.addPoints(cloud.pts.size() - num_added, cloud.pts.size() - 1);
 	}
+    // Update map with a set of new points
+    void update(vector<PointXYZ> &points0, vector<PointXYZ> &normals0, vector<float> &scores0, vector<bool> &flag0)
+    {
+
+        // Reserve new space if needed
+        if (samples.size() < 1)
+            samples.reserve(10 * points0.size());
+        if (cloud.pts.capacity() < cloud.pts.size() + points0.size())
+        {
+            cloud.pts.reserve(cloud.pts.capacity() + points0.size());
+            counts.reserve(counts.capacity() + points0.size());
+            normals.reserve(normals.capacity() + points0.size());
+            scores.reserve(scores.capacity() + points0.size());
+        }
+
+        //std::cout << std::endl << "--------------------------------------" << std::endl;
+        //std::cout << "current max_load_factor: " << samples.max_load_factor() << std::endl;
+        //std::cout << "current size: " << samples.size() << std::endl;
+        //std::cout << "current bucket_count: " << samples.bucket_count() << std::endl;
+        //std::cout << "current load_factor: " << samples.load_factor() << std::endl;
+        //std::cout << "--------------------------------------" << std::endl << std::endl;
+
+        // Initialize variables
+        float inv_dl = 1 / dl;
+        size_t i = 0;
+        VoxKey k0;
+        size_t num_added = 0;
+
+        for (auto &p : points0)
+        {
+            // Position of point in sample map
+            PointXYZ p_pos = p * inv_dl;
+
+            // Corresponding key
+            k0.x = (int)floor(p_pos.x);
+            k0.y = (int)floor(p_pos.y);
+            k0.z = (int)floor(p_pos.z);
+
+            // Update the point count
+            if (samples.count(k0) < 1)
+            {
+                // Create a new sample at this location
+                init_sample(k0, p, normals0[i], scores0[i], flag0[i]);
+                num_added++;
+
+                // Update grid limits
+                update_limits(k0);
+            }
+            else
+                update_sample(samples[k0], p, normals0[i], scores0[i], flag0[i]);
+            i++;
+        }
+
+        // Update tree
+        tree.addPoints(cloud.pts.size() - num_added, cloud.pts.size() - 1);
+    }
 
 	// Debug method that saves the map as ply file
 	void debug_save_ply(string &path, int idx)

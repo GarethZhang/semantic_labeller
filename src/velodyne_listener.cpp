@@ -30,6 +30,9 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     initializeSubscribers(); // package up the messy work of creating subscribers; do this overhead in constructor
     initializePublishers();
 
+    map.set_map_dl(map_dl);
+    buffer_map.set_map_dl(map_dl);
+
     std::ostringstream pose_fname;
     pose_fname.str(""); pose_fname.clear();
     pose_fname << save_dir << "map_poses"<< ".txt";
@@ -197,6 +200,29 @@ void velodyne_listener_class::kfRefCallback(const sensor_msgs::PointCloud2::Cons
 // note, though, use of member variables and access to pub_ (which is a member method)
 void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) {
 
+    vector<string> clock_str;
+    vector<clock_t> t;
+    if (show_debug_msg)
+    {
+        clock_str.reserve(20);
+        t.reserve(20);
+        clock_str.push_back("tf listener ....... ");
+        clock_str.push_back("Pose saving ....... ");
+        clock_str.push_back("Process msg ....... ");
+        clock_str.push_back("Scan saving ....... ");
+        clock_str.push_back("Ground extraction . ");
+        clock_str.push_back("Transform scan .... ");
+        clock_str.push_back("Polar conversion .. ");
+        clock_str.push_back("Grid subsampling .. ");
+        clock_str.push_back("Frame normals ..... ");
+        clock_str.push_back("Sub-ground ........ ");
+        clock_str.push_back("Save buffer ....... ");
+        clock_str.push_back("Normals filter .... ");
+        clock_str.push_back("Save map .......... ");
+        clock_str.push_back("Complete .......... ");
+    }
+    t.push_back(std::clock());
+
     //////////////////////////////////////
     // Listen to Velodyne to Map transform
     //////////////////////////////////////
@@ -210,8 +236,19 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
     catch (tf::TransformException ex) {
         ROS_ERROR("%s", ex.what());
     }
+    t.push_back(std::clock());
 
     if (available) {
+        // Update frames count
+        cur_frame++;
+        if (cur_frame < frames_to_skip){
+            ROS_INFO("CURRENT FRAME: %d ======> SKIP", cur_frame);
+            return;
+        }
+        else{
+            ROS_INFO("CURRENT FRAME: %d ======> PROCEED", cur_frame);
+        }
+
         //////////////////////////
         // Save transforms in .txt
         //////////////////////////
@@ -227,6 +264,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                       velo_to_map_transform.getBasis().getRow(2).z() << " " << velo_to_map_transform.getOrigin().x()
                       << " " <<
                       velo_to_map_transform.getOrigin().y() << " " << velo_to_map_transform.getOrigin().z() << "\n";
+        t.push_back(std::clock());
 
         //////////////////////////////
         // Read point cloud message //
@@ -243,14 +281,31 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             // Add all points to the vector container
             velo.push_back(PointXYZ(*iter_x, *iter_y, *iter_z));
         }
+        t.push_back(std::clock());
 
         // save out every frame of point cloud
         if (save_velo) {
             std::string save_str = configureDataPath("velo", msg->header.seq, msg->header.stamp.toNSec());
             save_cloud(save_str, velo);
         }
+        t.push_back(std::clock());
 
         if (save_buffer || save_pointmap){
+            //////////////////////////////////////////
+            // Ground extraction on velodyne scan   //
+            //////////////////////////////////////////
+
+            vector<bool> ground_flag(velo.size(), false);
+            extract_ground_himmelsbach(velo, ground_flag);
+            int ground_count = 0;
+            for (int i = 0; i < ground_flag.size(); ++i) {
+                if (ground_flag[i]) {
+                    ground_count++;
+                }
+            }
+//            ROS_INFO("POINTS: %lu | GROUND COUNT: %d", velo.size(), ground_count);
+            t.push_back(std::clock());
+
             // create a copy of the point cloud vector
             vector<PointXYZ> velo_transformed(velo);
 
@@ -266,10 +321,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
             velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
 
-            //////////////////////////////////////////
-            // Preprocess frame and compute normals //
-            //////////////////////////////////////////
-
+            t.push_back(std::clock());
 
             //////////////////////////////////////////
             // Preprocess frame and compute normals //
@@ -289,9 +341,13 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             // Apply log scale to radius coordinate (in place)
             lidar_log_radius(polar_pts, polar_r, (float) r_scale);
 
+            t.push_back(std::clock());
+
             vector<PointXYZ> sub_pts;
             vector<size_t> sub_inds;
             grid_subsampling_centers(velo_transformed, sub_pts, sub_inds, (float) frame_voxel_size);
+
+            t.push_back(std::clock());
 
             /////////////////////
             // Compute normals //
@@ -307,19 +363,30 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             // Call polar processing function
             extract_lidar_frame_normals(velo_transformed, polar_pts, sub_inds, normals, norm_scores, polar_r);
 
-            int count = 0;
-            for (int i = 0; i < norm_scores.size(); ++i) {
-                if (norm_scores[i] > 0) {
-                    count++;
-                }
+//            vector<PointXYZ> full_normals;
+//            vector<float> full_norm_scores;
+//            vector<size_t> full_inds;
+//            for (int i = 0; i < velo_transformed.size(); ++i){
+//                full_inds.push_back(i);
+//            }
+//            extract_lidar_frame_normals(velo_transformed, polar_pts, full_inds, full_normals, full_norm_scores, polar_r);
+//            std::string buffer_map_save_str = configureDataPath("example_frame_normals", msg->header.seq, msg->header.stamp.toNSec());
+//            save_cloud(buffer_map_save_str, velo_transformed, full_normals);
+
+            t.push_back(std::clock());
+
+            // Update sub_ground_flag
+            vector<bool> sub_ground_flag;
+            for (int i = 0; i < sub_inds.size(); ++i){
+                sub_ground_flag.push_back(ground_flag[sub_inds[i]]);
             }
-            ROS_INFO("COUNT: %d", count);
+            t.push_back(std::clock());
 
             /////////////////////////////
             // Save buffer point cloud //
             /////////////////////////////
             if (save_buffer) {
-                buffer_map.update(sub_pts, normals, norm_scores);
+                buffer_map.update(sub_pts, normals, norm_scores, sub_ground_flag);
 
                 // save out map
                 std::string buffer_map_save_str = configureDataPath("buffer_map", msg->header.seq, msg->header.stamp.toNSec());
@@ -328,25 +395,31 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     buffer_map_features.push_back(score);
                 for (auto count:buffer_map.counts)
                     buffer_map_features.push_back(count);
+                for (int i = 0; i < buffer_map.ground_scores.size(); ++i){
+                    buffer_map_features.push_back(buffer_map.ground_scores[i] / buffer_map.counts[i]);
+                }
                 save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
             }
+            t.push_back(std::clock());
 
             long int before_size = sub_pts.size();
 
             // Remove points with a low score
             filter_pointcloud(sub_pts, norm_scores, 0.1);
             filter_pointcloud(normals, norm_scores, 0.1);
+            filter_by_value(sub_ground_flag, norm_scores, 0.1);
             norm_scores.erase(remove_if(norm_scores.begin(), norm_scores.end(), [](const float s) { return s < 0.1; }),
                               norm_scores.end());
 
-            ROS_INFO("BEFORE: %lu | AFTER: %lu", before_size, sub_pts.size());
+            ROS_INFO("BEFORE FILTER: %lu | AFTER: %lu", before_size, sub_pts.size());
+            t.push_back(std::clock());
             ////////////////
             // Add to Map //
             ////////////////
 
             // The update function is called only on subsampled points as the others have no normal
             if (save_pointmap) {
-                map.update(sub_pts, normals, norm_scores);
+                map.update(sub_pts, normals, norm_scores, sub_ground_flag);
 
                 // save out map
                 std::string map_save_str = configureDataPath("map", msg->header.seq, msg->header.stamp.toNSec());
@@ -355,8 +428,12 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     map_features.push_back(score);
                 for (auto count:map.counts)
                     map_features.push_back(count);
+                for (int i = 0; i < map.ground_scores.size(); ++i){
+                    map_features.push_back(map.ground_scores[i] / map.counts[i]);
+                }
                 save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
             }
+            t.push_back(std::clock());
         }
         else{
             ROS_INFO("Skip map creation...");
@@ -365,11 +442,32 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
     else{
         ROS_INFO("Transform not ready yet...");
     }
+    t.push_back(std::clock());
+
+    ////////////////////////
+    // Debugging messages //
+    ////////////////////////
+
+    if (show_debug_msg)
+    {
+        for (size_t i = 0; i < min(t.size() - 1, clock_str.size()); i++)
+        {
+            double duration = 1000 * (t[i + 1] - t[i]) / (double)CLOCKS_PER_SEC;
+            cout << clock_str[i] << duration << " ms" << endl;
+        }
+        cout << endl
+             << "***********************" << endl
+             << endl;
+    }
 }
 
 void velodyne_listener_class::getParams() {
     nh_.param<std::string>("save_dir", save_dir, "/home/haowei/Desktop/");
     nh_.param<bool>("save_to_ply", save_to_ply, true);
+    nh_.param<bool>("show_debug_msg", show_debug_msg, true);
+
+    nh_.param<int>("frames_to_skip", frames_to_skip, 1.0);
+    nh_.param<float>("map_dl", map_dl, 1.0);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
 
@@ -418,6 +516,20 @@ vector<PointXYZ> velodyne_listener_class::extract_negative(std::vector<PointXYZ>
     return ground;
 }
 
+void velodyne_listener_class::extract_negative(std::vector<bool> &flag, std::vector<int> &indices) {
+    std::sort(indices.begin(), indices.end());
+    std::vector<int> in_order;
+    for (uint i = 0; i < flag.size(); i++) {
+        if (std::binary_search(indices.begin(), indices.end(), i)){
+            in_order.push_back(i);
+        }
+    }
+    std::sort(in_order.begin(), in_order.end());
+    for (uint i = 0; i < in_order.size(); i++) {
+        flag[in_order[i]] = true;
+    }
+}
+
 vector<PointXYZ> velodyne_listener_class::extract_ground_himmelsbach(vector<PointXYZ> &cloud) {
     Himmelsbach himmelsbach(cloud);
     himmelsbach.set_alpha(alpha);
@@ -428,6 +540,16 @@ vector<PointXYZ> velodyne_listener_class::extract_ground_himmelsbach(vector<Poin
     vector<PointXYZ> ground = extract_negative(cloud, inliers);
 
     return ground;
+}
+
+void velodyne_listener_class::extract_ground_himmelsbach(vector<PointXYZ> &cloud, vector<bool> &flag) {
+    Himmelsbach himmelsbach(cloud);
+    himmelsbach.set_alpha(alpha);
+    himmelsbach.set_tolerance(tolerance);
+    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev);
+    std::vector<int> inliers;
+    himmelsbach.compute_model_and_get_inliers(inliers);
+    extract_negative(flag, inliers);
 }
 
 vector<PointXYZ> velodyne_listener_class::extract_ground(vector<PointXYZ> &points,

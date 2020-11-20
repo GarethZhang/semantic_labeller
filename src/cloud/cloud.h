@@ -349,6 +349,7 @@ typedef boost::shared_ptr<PointCloudXYZ> PointCloudXYZPtr;
 
 // Utility function for pointclouds
 void filter_pointcloud(std::vector<PointXYZ>& pts, std::vector<float>& scores, float filter_value);
+void filter_by_value(std::vector<bool>& flag, std::vector<float>& scores, float filter_value);
 
 
 // PLY reading/saving functions

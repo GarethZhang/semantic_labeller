@@ -16,6 +16,7 @@
 #include <random>
 #include <unordered_set>
 #include <numeric>
+#include <chrono>
 
 #include "grid_subsampling/grid_subsampling.h"
 #include "himmelsbach/himmelsbach.h"
@@ -77,10 +78,10 @@ private:
     // params config
     std::string save_dir;
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
-    bool save_to_ply, save_velo, save_velo_to_map, save_pointmap, save_buffer;
+    bool save_to_ply, save_velo, save_velo_to_map, save_pointmap, save_buffer, show_debug_msg;
     double max_distance, r_scale, h_scale, frame_voxel_size;
-    float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev;
-    int lidar_n_lines;
+    float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev, map_dl;
+    int lidar_n_lines, frames_to_skip, cur_frame = 0;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
@@ -93,7 +94,11 @@ private:
 
     vector<PointXYZ> extract_negative(std::vector<PointXYZ> &cloud, std::vector<int> &indices);
 
+    void extract_negative(std::vector<bool> &flag, std::vector<int> &indices);
+
     vector<PointXYZ> extract_ground_himmelsbach(vector<PointXYZ> &cloud);
+
+    void extract_ground_himmelsbach(vector<PointXYZ> &cloud, vector<bool> &flag);
 
     void moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, bool update);
 

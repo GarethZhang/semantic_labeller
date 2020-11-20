@@ -104,6 +104,18 @@ void filter_pointcloud(std::vector<PointXYZ>& pts, std::vector<float>& scores, f
 		pts.end());
 }
 
+void filter_by_value(std::vector<bool>& flag, std::vector<float>& scores, float filter_value)
+{
+    std::vector<bool> ret_flag;
+    for (int i = 0; i < scores.size(); ++i){
+        if (scores[i] >= filter_value){
+            ret_flag.push_back(flag[i]);
+        }
+    }
+    flag.clear();
+    flag = ret_flag;
+}
+
 
 // Debug functions
 // ***************
