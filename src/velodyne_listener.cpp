@@ -291,6 +291,11 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
         t.push_back(std::clock());
 
         if (save_buffer || save_pointmap){
+            ////////////////////////////////////////////
+            // Filter out points that are too close   //
+            ////////////////////////////////////////////
+            auto keep_index = filter_pointcloud(velo, pow(point_distance_thresh, 2));
+
             //////////////////////////////////////////
             // Ground extraction on velodyne scan   //
             //////////////////////////////////////////
@@ -320,6 +325,8 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             Eigen::Matrix3f R_init = (eigenTr.matrix().block(0, 0, 3, 3)).cast<float>();
             Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
             velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
+
+            filter_pointcloud(velo_transformed, keep_index, 0.5);
 
             t.push_back(std::clock());
 
@@ -470,6 +477,7 @@ void velodyne_listener_class::getParams() {
     nh_.param<float>("map_dl", map_dl, 1.0);
 
     nh_.param<double>("max_distance", max_distance, 1.0);
+    nh_.param<double>("point_distance_thresh", point_distance_thresh, 1.0);
 
     nh_.param<bool>("save_velo", save_velo, true);
     nh_.param<bool>("save_velo_to_map", save_velo_to_map, true);
