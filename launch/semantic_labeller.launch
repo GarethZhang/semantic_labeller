@@ -66,9 +66,9 @@
   <arg name="Tm" default="0.18"/> <!--  Slopes greater than this value will be considered non-ground-->
   <arg name="Tm_small" default="0.0873"/> <!--  Slopes less than this value will be checked for being a plateau-->
   <arg name="Tb" default="100.0"/> <!--  Flat regions that are higher than this will be considered non-ground-->
-  <arg name="Trmse" default="0.1"/> <!--  If the RSME of the line fit exceeds this value, it will be rejected-->
-  <arg name="Tdprev" default="0.5"/> <!--  Maximum allowed distance between previous line and start of new line-->
-  <arg name="abs_z" default="-1.0"/> <!--  Maximum allowed distance between previous line and start of new line-->
+  <arg name="Trmse" default="0.05"/> <!--  If the RSME of the line fit exceeds this value, it will be rejected-->
+  <arg name="Tdprev" default="0.2"/> <!--  Maximum allowed distance between previous line and start of new line-->
+  <arg name="abs_z" default="-1.0"/> <!--  absolute z-axis threshold on point to be considered part of ground-->
 
   <arg name="num_bins_small" default="120"/>
   <arg name="num_bins_large" default="54"/>
