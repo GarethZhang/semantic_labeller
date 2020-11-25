@@ -47,9 +47,13 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
         std::vector<int> line_set;
         int c = 0;
         int i = 0;
-        for (int idx : bins) {
-            if (idx < 0)
+        int idx;
+        while (i < bins.size()){
+            idx = bins[i];
+            if (idx < 0){
+                i++;
                 continue;
+            }
             float m = 1.0;
             float b = 0.0;
             if (line_set.size() >= 2) {
@@ -63,30 +67,39 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
                     line_set.clear();
                     i--;
                 }
-            } else {
+            }
+            else {
                 float dprev = 10000;
                 if (lines.size() > 0 && (c - 1) >= 0)
                     dprev = distpointline(lines[c - 1], idx);
                 if (dprev <= Tdprev || c == 0 || line_set.size() != 0)
                     line_set.push_back(idx);
             }
+            i++;
         }
+        if (lines.size() == 0){
+            float m = 1.0;
+            float b = 0.0;
+            fitline(line_set, m, b);
+            lines.push_back(Line(pc, line_set, m, b));
+        }
+//        printf("LINES SIZE: %lu\n", lines.size());
         // Assign points as inliers if they are within a treshold of the ground model
         for (int idx : segment) {
-            float r = sqrt(pow(pc[i].x, 2) + pow(pc[i].y, 2));
+            float r = sqrt(pow(pc[idx].x, 2) + pow(pc[idx].y, 2));
             // get line that's closest to the candidate point based on distance to endpoints
             int closest = -1;
             float dmin = 10000;
-            for (uint i = 0; i < lines.size(); i++) {
-                float d1 = fabs(lines[i].start - r);
-                float d2 = fabs(lines[i].end - r);
+            for (uint j = 0; j < lines.size(); j++) {
+                float d1 = fabs(lines[j].start - r);
+                float d2 = fabs(lines[j].end - r);
                 if (d1 < dmin || d2 < dmin) {
                     dmin = std::min(d1, d2);
-                    closest = i;
+                    closest = j;
                 }
             }
             if (closest >= 0) {
-                if (distpointline(lines[closest], idx) < tolerance)
+                if (distpointline(lines[closest], idx) < tolerance && pc[idx].z <= abs_z)
                     inliers.push_back(idx);
             }
         }

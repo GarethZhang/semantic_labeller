@@ -22,6 +22,7 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     map_publish(new pcl::PointCloud<pcl::PointXYZ>),
     map_ground_publish(new pcl::PointCloud<pcl::PointXYZ>),
+    latent_publish(new pcl::PointCloud<pcl::PointXYZ>),
     velo_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 1000),
     velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 1000)
     { // constructor
@@ -308,139 +309,147 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     ground_count++;
                 }
             }
+
+            // Publish ros messages
+            moveToPCLPtr(velo, latent_publish, ground_flag, false);
+            pcl::toROSMsg(*latent_publish, latent_msg);
+            latent_msg.header.frame_id = velodyne_frame;
+            latent_msg.header.stamp = msg->header.stamp;
+            latent_pub_.publish(latent_msg);
+
 //            ROS_INFO("POINTS: %lu | GROUND COUNT: %d", velo.size(), ground_count);
             t.push_back(std::clock());
 
-            // create a copy of the point cloud vector
-            vector<PointXYZ> velo_transformed(velo);
-
-            // Matrix for original/aligned data (Shallow copy of parts of the points vector)
-            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_mat((float *) velo.data(), 3, N);
-            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_transformed_mat((float *) velo_transformed.data(), 3, N);
-
-            // Apply initial transformation
-            //    transformFromTFTransform(velo_mat, velo_transformed_mat, velo_to_map_transform);
-            Eigen::Affine3d eigenTr;
-            tf::transformTFToEigen(velo_to_map_transform, eigenTr);
-            Eigen::Matrix3f R_init = (eigenTr.matrix().block(0, 0, 3, 3)).cast<float>();
-            Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
-            velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
-
-            filter_pointcloud(velo_transformed, keep_index, 0.5);
-
-            t.push_back(std::clock());
-
-            //////////////////////////////////////////
-            // Preprocess frame and compute normals //
-            //////////////////////////////////////////
-
-            // Create a copy of points in polar coordinates
-            vector<PointXYZ> polar_pts(velo_transformed);
-            cart2pol_(polar_pts);
-
-            // Get lidar angle resolution
-            float minTheta, maxTheta;
-            float lidar_angle_res = get_lidar_angle_res(polar_pts, minTheta, maxTheta, lidar_n_lines);
-
-            // Define the polar neighbors radius in the scaled polar coordinates
-            float polar_r = 1.5 * lidar_angle_res;
-
-            // Apply log scale to radius coordinate (in place)
-            lidar_log_radius(polar_pts, polar_r, (float) r_scale);
-
-            t.push_back(std::clock());
-
-            vector<PointXYZ> sub_pts;
-            vector<size_t> sub_inds;
-            grid_subsampling_centers(velo_transformed, sub_pts, sub_inds, (float) frame_voxel_size);
-
-            t.push_back(std::clock());
-
-            /////////////////////
-            // Compute normals //
-            /////////////////////
-
-            // Init result containers
-            vector<PointXYZ> normals;
-            vector<float> norm_scores;
-
-            // Apply horizontal scaling (to have smaller neighborhoods in horizontal direction)
-            lidar_horizontal_scale(polar_pts, (float) h_scale);
-
-            // Call polar processing function
-            extract_lidar_frame_normals(velo_transformed, polar_pts, sub_inds, normals, norm_scores, polar_r);
-
-//            vector<PointXYZ> full_normals;
-//            vector<float> full_norm_scores;
-//            vector<size_t> full_inds;
-//            for (int i = 0; i < velo_transformed.size(); ++i){
-//                full_inds.push_back(i);
+//            // create a copy of the point cloud vector
+//            vector<PointXYZ> velo_transformed(velo);
+//
+//            // Matrix for original/aligned data (Shallow copy of parts of the points vector)
+//            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_mat((float *) velo.data(), 3, N);
+//            Eigen::Map<Eigen::Matrix<float, 3, Eigen::Dynamic>> velo_transformed_mat((float *) velo_transformed.data(), 3, N);
+//
+//            // Apply initial transformation
+//            //    transformFromTFTransform(velo_mat, velo_transformed_mat, velo_to_map_transform);
+//            Eigen::Affine3d eigenTr;
+//            tf::transformTFToEigen(velo_to_map_transform, eigenTr);
+//            Eigen::Matrix3f R_init = (eigenTr.matrix().block(0, 0, 3, 3)).cast<float>();
+//            Eigen::Vector3f T_init = (eigenTr.matrix().block(0, 3, 3, 1)).cast<float>();
+//            velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
+//
+//            filter_pointcloud(velo_transformed, keep_index, 0.5);
+//
+//            t.push_back(std::clock());
+//
+//            //////////////////////////////////////////
+//            // Preprocess frame and compute normals //
+//            //////////////////////////////////////////
+//
+//            // Create a copy of points in polar coordinates
+//            vector<PointXYZ> polar_pts(velo_transformed);
+//            cart2pol_(polar_pts);
+//
+//            // Get lidar angle resolution
+//            float minTheta, maxTheta;
+//            float lidar_angle_res = get_lidar_angle_res(polar_pts, minTheta, maxTheta, lidar_n_lines);
+//
+//            // Define the polar neighbors radius in the scaled polar coordinates
+//            float polar_r = 1.5 * lidar_angle_res;
+//
+//            // Apply log scale to radius coordinate (in place)
+//            lidar_log_radius(polar_pts, polar_r, (float) r_scale);
+//
+//            t.push_back(std::clock());
+//
+//            vector<PointXYZ> sub_pts;
+//            vector<size_t> sub_inds;
+//            grid_subsampling_centers(velo_transformed, sub_pts, sub_inds, (float) frame_voxel_size);
+//
+//            t.push_back(std::clock());
+//
+//            /////////////////////
+//            // Compute normals //
+//            /////////////////////
+//
+//            // Init result containers
+//            vector<PointXYZ> normals;
+//            vector<float> norm_scores;
+//
+//            // Apply horizontal scaling (to have smaller neighborhoods in horizontal direction)
+//            lidar_horizontal_scale(polar_pts, (float) h_scale);
+//
+//            // Call polar processing function
+//            extract_lidar_frame_normals(velo_transformed, polar_pts, sub_inds, normals, norm_scores, polar_r);
+//
+////            vector<PointXYZ> full_normals;
+////            vector<float> full_norm_scores;
+////            vector<size_t> full_inds;
+////            for (int i = 0; i < velo_transformed.size(); ++i){
+////                full_inds.push_back(i);
+////            }
+////            extract_lidar_frame_normals(velo_transformed, polar_pts, full_inds, full_normals, full_norm_scores, polar_r);
+////            std::string buffer_map_save_str = configureDataPath("example_frame_normals", msg->header.seq, msg->header.stamp.toNSec());
+////            save_cloud(buffer_map_save_str, velo_transformed, full_normals);
+//
+//            t.push_back(std::clock());
+//
+//            // Update sub_ground_flag
+//            vector<bool> sub_ground_flag;
+//            for (int i = 0; i < sub_inds.size(); ++i){
+//                sub_ground_flag.push_back(ground_flag[sub_inds[i]]);
 //            }
-//            extract_lidar_frame_normals(velo_transformed, polar_pts, full_inds, full_normals, full_norm_scores, polar_r);
-//            std::string buffer_map_save_str = configureDataPath("example_frame_normals", msg->header.seq, msg->header.stamp.toNSec());
-//            save_cloud(buffer_map_save_str, velo_transformed, full_normals);
-
-            t.push_back(std::clock());
-
-            // Update sub_ground_flag
-            vector<bool> sub_ground_flag;
-            for (int i = 0; i < sub_inds.size(); ++i){
-                sub_ground_flag.push_back(ground_flag[sub_inds[i]]);
-            }
-            t.push_back(std::clock());
-
-            /////////////////////////////
-            // Save buffer point cloud //
-            /////////////////////////////
-            if (save_buffer) {
-                buffer_map.update(sub_pts, normals, norm_scores, sub_ground_flag);
-
-                // save out map
-                std::string buffer_map_save_str = configureDataPath("buffer_map", msg->header.seq, msg->header.stamp.toNSec());
-                vector<float> buffer_map_features;
-                for (auto score:buffer_map.scores)
-                    buffer_map_features.push_back(score);
-                for (auto count:buffer_map.counts)
-                    buffer_map_features.push_back(count);
-                for (int i = 0; i < buffer_map.ground_scores.size(); ++i){
-                    buffer_map_features.push_back(buffer_map.ground_scores[i] / buffer_map.counts[i]);
-                }
-                save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
-            }
-            t.push_back(std::clock());
-
-            long int before_size = sub_pts.size();
-
-            // Remove points with a low score
-            filter_pointcloud(sub_pts, norm_scores, 0.1);
-            filter_pointcloud(normals, norm_scores, 0.1);
-            filter_by_value(sub_ground_flag, norm_scores, 0.1);
-            norm_scores.erase(remove_if(norm_scores.begin(), norm_scores.end(), [](const float s) { return s < 0.1; }),
-                              norm_scores.end());
-
-            ROS_INFO("BEFORE FILTER: %lu | AFTER: %lu", before_size, sub_pts.size());
-            t.push_back(std::clock());
-            ////////////////
-            // Add to Map //
-            ////////////////
-
-            // The update function is called only on subsampled points as the others have no normal
-            if (save_pointmap) {
-                map.update(sub_pts, normals, norm_scores, sub_ground_flag);
-
-                // save out map
-                std::string map_save_str = configureDataPath("map", msg->header.seq, msg->header.stamp.toNSec());
-                vector<float> map_features;
-                for (auto score:map.scores)
-                    map_features.push_back(score);
-                for (auto count:map.counts)
-                    map_features.push_back(count);
-                for (int i = 0; i < map.ground_scores.size(); ++i){
-                    map_features.push_back(map.ground_scores[i] / map.counts[i]);
-                }
-                save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
-            }
-            t.push_back(std::clock());
+//            t.push_back(std::clock());
+//
+//            /////////////////////////////
+//            // Save buffer point cloud //
+//            /////////////////////////////
+//            if (save_buffer) {
+//                buffer_map.update(sub_pts, normals, norm_scores, sub_ground_flag);
+//
+//                // save out map
+//                std::string buffer_map_save_str = configureDataPath("buffer_map", msg->header.seq, msg->header.stamp.toNSec());
+//                vector<float> buffer_map_features;
+//                for (auto score:buffer_map.scores)
+//                    buffer_map_features.push_back(score);
+//                for (auto count:buffer_map.counts)
+//                    buffer_map_features.push_back(count);
+//                for (int i = 0; i < buffer_map.ground_scores.size(); ++i){
+//                    buffer_map_features.push_back(buffer_map.ground_scores[i] / buffer_map.counts[i]);
+//                }
+//                save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
+//            }
+//            t.push_back(std::clock());
+//
+//            long int before_size = sub_pts.size();
+//
+//            // Remove points with a low score
+//            filter_pointcloud(sub_pts, norm_scores, 0.1);
+//            filter_pointcloud(normals, norm_scores, 0.1);
+//            filter_by_value(sub_ground_flag, norm_scores, 0.1);
+//            norm_scores.erase(remove_if(norm_scores.begin(), norm_scores.end(), [](const float s) { return s < 0.1; }),
+//                              norm_scores.end());
+//
+//            ROS_INFO("BEFORE FILTER: %lu | AFTER: %lu", before_size, sub_pts.size());
+//            t.push_back(std::clock());
+//            ////////////////
+//            // Add to Map //
+//            ////////////////
+//
+//            // The update function is called only on subsampled points as the others have no normal
+//            if (save_pointmap) {
+//                map.update(sub_pts, normals, norm_scores, sub_ground_flag);
+//
+//                // save out map
+//                std::string map_save_str = configureDataPath("map", msg->header.seq, msg->header.stamp.toNSec());
+//                vector<float> map_features;
+//                for (auto score:map.scores)
+//                    map_features.push_back(score);
+//                for (auto count:map.counts)
+//                    map_features.push_back(count);
+//                for (int i = 0; i < map.ground_scores.size(); ++i){
+//                    map_features.push_back(map.ground_scores[i] / map.counts[i]);
+//                }
+//                save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
+//            }
+//            t.push_back(std::clock());
         }
         else{
             ROS_INFO("Skip map creation...");
@@ -496,6 +505,14 @@ void velodyne_listener_class::getParams() {
     nh_.param<float>("Tb", Tb, 1.0);
     nh_.param<float>("Trmse", Trmse, 1.0);
     nh_.param<float>("Tdprev", Tdprev, 1.0);
+    nh_.param<float>("abs_z", abs_z, 1.0);
+
+    nh_.param<int>("num_bins_small", num_bins_small, 1.0);
+    nh_.param<int>("num_bins_large", num_bins_large, 1.0);
+    nh_.param<float>("bin_size_small", bin_size_small, 1.0);
+    nh_.param<float>("bin_size_large", bin_size_large, 1.0);
+    nh_.param<float>("rmin", rmin, 1.0);
+    nh_.param<float>("rmax", rmax, 1.0);
 
     nh_.param<std::string>("submap_frame", submap_frame, "/kf_ref");
     nh_.param<std::string>("submap_topic", submap_topic, "/lidar_keyframe_slam/kfRef_cloud");
@@ -542,7 +559,7 @@ vector<PointXYZ> velodyne_listener_class::extract_ground_himmelsbach(vector<Poin
     Himmelsbach himmelsbach(cloud);
     himmelsbach.set_alpha(alpha);
     himmelsbach.set_tolerance(tolerance);
-    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev);
+    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev, abs_z);
     std::vector<int> inliers;
     himmelsbach.compute_model_and_get_inliers(inliers);
     vector<PointXYZ> ground = extract_negative(cloud, inliers);
@@ -554,7 +571,8 @@ void velodyne_listener_class::extract_ground_himmelsbach(vector<PointXYZ> &cloud
     Himmelsbach himmelsbach(cloud);
     himmelsbach.set_alpha(alpha);
     himmelsbach.set_tolerance(tolerance);
-    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev);
+    himmelsbach.set_thresholds(Tm, Tm_small, Tb, Trmse, Tdprev, abs_z);
+    himmelsbach.set_bins_config(num_bins_small, num_bins_large, bin_size_small, bin_size_large, rmin, rmax);
     std::vector<int> inliers;
     himmelsbach.compute_model_and_get_inliers(inliers);
     extract_negative(flag, inliers);
@@ -640,15 +658,17 @@ vector<PointXYZ> velodyne_listener_class::extract_ground(vector<PointXYZ> &point
     return best_outliers;
 }
 
-void velodyne_listener_class::moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, bool update) {
+void velodyne_listener_class::moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, vector<bool> &flag, bool update) {
     if (!update)
         PCL_cloud_ptr->clear();
     pcl::PointXYZ p;
     for (int i = 0; i < cloud.size(); ++i){
-        p.x = cloud[i].x;
-        p.y = cloud[i].y;
-        p.z = cloud[i].z;
-        PCL_cloud_ptr->push_back(p);
+        if (!flag[i]){
+            p.x = cloud[i].x;
+            p.y = cloud[i].y;
+            p.z = cloud[i].z;
+            PCL_cloud_ptr->push_back(p);
+        }
     }
 }
 

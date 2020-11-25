@@ -26,12 +26,21 @@ public:
     explicit Himmelsbach(std::vector<PointXYZ> pc_) : pc(pc_) {}
     void set_alpha(float alpha_) {alpha = alpha_;}
     void set_tolerance(float tolerance_) {tolerance = tolerance_;}
-    void set_thresholds(float Tm_, float Tm_small_, float Tb_, float Trmse_, float Tdprev_) {
+    void set_thresholds(float Tm_, float Tm_small_, float Tb_, float Trmse_, float Tdprev_, float abs_z_) {
         Tm = Tm_;
         Tm_small = Tm_small_;
         Tb = Tb_;
         Trmse = Trmse_;
         Tdprev = Tdprev_;
+        abs_z = abs_z_;
+    }
+    void set_bins_config(int num_bins_small_, int num_bins_large_, float bin_size_small_, float bin_size_large_, float rmin_, float rmax_) {
+        num_bins_small = num_bins_small_;
+        num_bins_large = num_bins_large_;
+        bin_size_small = bin_size_small_;
+        bin_size_large = bin_size_large_;
+        rmin = rmin_;
+        rmax = rmax_;
     }
 
     /*!
@@ -55,6 +64,7 @@ private:
     float Tb = -1.5;                /*!< Flat regions that are higher than this value will be considered non-ground */
     float Trmse = 0.1;                  /*!< If the RSME of the line fit exceeds this value, it will be rejected */
     float Tdprev = 0.25;                /*!< Maximum allowed distance between previous line and start of new line */
+    float abs_z = 0.5;
 
     /*!
        \brief Sorts points into one of N = (2 * pi) / alpha segments.

@@ -70,7 +70,7 @@ private:
     ofstream pose_file;
 
     // PCL point cloud for publishing ROS messages
-    pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish, map_ground_publish;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr map_publish, map_ground_publish, latent_publish;
 
     // global map
     PointMap map, buffer_map;
@@ -80,8 +80,8 @@ private:
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
     bool save_to_ply, save_velo, save_velo_to_map, save_pointmap, save_buffer, show_debug_msg;
     double max_distance, r_scale, h_scale, frame_voxel_size, point_distance_thresh;
-    float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev, map_dl;
-    int lidar_n_lines, frames_to_skip, cur_frame = 0;
+    float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev, abs_z, map_dl, bin_size_small, bin_size_large, rmin, rmax;
+    int lidar_n_lines, frames_to_skip, num_bins_small, num_bins_large, cur_frame = 0;
 
     // member methods as well:
     void initializeSubscribers(); // we will define some helper methods to encapsulate the gory details of initializing subscribers, publishers and services
@@ -100,7 +100,7 @@ private:
 
     void extract_ground_himmelsbach(vector<PointXYZ> &cloud, vector<bool> &flag);
 
-    void moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, bool update);
+    void moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCloud<pcl::PointXYZ>::Ptr &PCL_cloud_ptr, vector<bool> &flag, bool update);
 
     vector<PointXYZ>
     extract_ground(vector<PointXYZ> &points, vector<PointXYZ> &normals, float angle_vertical_thresh = M_PI / 6, float dist_thresh = 0.1,

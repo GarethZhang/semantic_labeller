@@ -6,11 +6,11 @@
   <arg name="submap_topic" default="/lidar_keyframe_slam/kfRef_cloud"/>
   <arg name="slamMap_frame" default="map"/>
   <arg name="slamMap_topic" default="/lidar_keyframe_slam/slamMap_cloud"/>
-  <arg name="velodyne_frame" default="/velodyne"/>
+  <arg name="velodyne_frame" default="velodyne"/>
   <arg name="velodyne_topic" default="/velodyne_points"/>
   
   <arg name="rviz" default="true"/>
-  <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
+  <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/latent.rviz"/>
 
   <arg name="save_to_ply" default="false"/>
   <arg name="show_debug_msg" default="true"/>
@@ -23,6 +23,7 @@
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v4/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v5/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v6/"/>-->
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v7/"/>
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session_updated/"/>-->
 
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session/"/>-->
@@ -31,14 +32,14 @@
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v4/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v5/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v6/"/>-->
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v7/"/>
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v7/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session_updated/"/>-->
 
 <!--  &lt;!&ndash;  get velodyne scan .ply&ndash;&gt;-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session_updated/"/>-->
 
-  <arg name="frames_to_skip" default="30"/>
+  <arg name="frames_to_skip" default="0"/>
   <arg name="map_dl" default="0.15"/>
 
   <arg name="max_distance" default="1.0"/>
@@ -47,7 +48,7 @@
   <!--  pointmap params for saving out point cloud-->
   <arg name="save_velo" default="false"/> <!--  save velodyne frames in Frame velodyne-->
   <arg name="save_velo_to_map" default="false"/> <!--  save transformation from Frame velodyne to Frame map-->
-  <arg name="save_pointmap" default="true"/> <!--  save pointmap map-->
+  <arg name="save_pointmap" default="false"/> <!--  save pointmap map-->
   <arg name="save_buffer" default="true"/> <!--  save buffer that is an aggregate of velodyne frames-->
 
   <!--  submap point cloud pre-processing params-->
@@ -58,11 +59,19 @@
 
   <arg name="alpha" default="0.0873"/> <!--  Number of segments = (2 * M_PI) / alpha-->
   <arg name="tolerance" default="0.25"/> <!--  Metric distance from the ground plane to be considered a ground point-->
-  <arg name="Tm" default="0.36"/> <!--  Slopes greater than this value will be considered non-ground-->
+  <arg name="Tm" default="0.18"/> <!--  Slopes greater than this value will be considered non-ground-->
   <arg name="Tm_small" default="0.0873"/> <!--  Slopes less than this value will be checked for being a plateau-->
   <arg name="Tb" default="100.0"/> <!--  Flat regions that are higher than this will be considered non-ground-->
-  <arg name="Trmse" default="0.2"/> <!--  If the RSME of the line fit exceeds this value, it will be rejected-->
+  <arg name="Trmse" default="0.1"/> <!--  If the RSME of the line fit exceeds this value, it will be rejected-->
   <arg name="Tdprev" default="0.5"/> <!--  Maximum allowed distance between previous line and start of new line-->
+  <arg name="abs_z" default="-1.0"/> <!--  Maximum allowed distance between previous line and start of new line-->
+
+  <arg name="num_bins_small" default="120"/>
+  <arg name="num_bins_large" default="54"/>
+  <arg name="bin_size_small" default="0.1"/>
+  <arg name="bin_size_large" default="2.0"/>
+  <arg name="rmin" default="2.5"/>
+  <arg name="rmax" default="119.5"/>
 
   <!-- always make sure we are not using simulation time when running online-->
   <param unless="$(arg online)" name="/use_sim_time" value="true"/>
@@ -103,6 +112,14 @@
     <param name="Tb" type="double" value="$(arg Tb)"/>
     <param name="Trmse" type="double" value="$(arg Trmse)"/>
     <param name="Tdprev" type="double" value="$(arg Tdprev)"/>
+    <param name="abs_z" type="double" value="$(arg abs_z)"/>
+
+    <param name="num_bins_small" type="double" value="$(arg num_bins_small)"/>
+    <param name="num_bins_large" type="double" value="$(arg num_bins_large)"/>
+    <param name="bin_size_small" type="double" value="$(arg bin_size_small)"/>
+    <param name="bin_size_large" type="double" value="$(arg bin_size_large)"/>
+    <param name="rmin" type="double" value="$(arg rmin)"/>
+    <param name="rmax" type="double" value="$(arg rmax)"/>
 
     <param name="show_debug_msg" value="$(arg show_debug_msg)"/>
     <param name="save_to_ply" value="$(arg save_to_ply)"/>
