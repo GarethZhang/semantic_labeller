@@ -62,7 +62,12 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
                     line_set.push_back(idx);
                 } else {
                     fitline(line_set, m, b);
-                    lines.push_back(Line(pc, line_set, m, b));
+                    if (lines.size() <= 0){
+//                        for (auto line_set_idx:line_set){
+//                            inliers.push_back(line_set_idx);
+//                        }
+                        lines.push_back(Line(pc, line_set, m, b));
+                    }
                     c++;
                     line_set.clear();
                     i--;
@@ -81,6 +86,9 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
             float m = 1.0;
             float b = 0.0;
             fitline(line_set, m, b);
+//            for (auto line_set_idx:line_set){
+//                inliers.push_back(line_set_idx);
+//            }
             lines.push_back(Line(pc, line_set, m, b));
         }
 //        printf("LINES SIZE: %lu\n", lines.size());
@@ -99,7 +107,7 @@ void Himmelsbach::compute_model_and_get_inliers(std::vector<int> &inliers) {
                 }
             }
             if (closest >= 0) {
-                if (distpointline(lines[closest], idx) < tolerance && pc[idx].z <= abs_z)
+                if (distpointline(lines[closest], idx) < tolerance)
                     inliers.push_back(idx);
             }
         }
