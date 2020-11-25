@@ -353,6 +353,27 @@ public:
 	// Size of the map (number of point/voxel in the map)
 	size_t size() { return cloud.pts.size(); }
 
+	void clear(){
+		// Init limits
+		maxVox.x = numeric_limits<int>::min();
+		maxVox.y = numeric_limits<int>::min();
+		maxVox.z = numeric_limits<int>::min();
+		minVox.x = numeric_limits<int>::max();
+		minVox.y = numeric_limits<int>::max();
+		minVox.z = numeric_limits<int>::max();
+
+		cloud.pts.clear();
+		normals.clear();
+		scores.clear();
+		counts.clear();
+		ground_scores.clear();
+		ground_counts.clear();
+
+		samples.clear();
+
+//		tree.clear();
+	}
+
 	// Init of voxel centroid
 	void init_sample(const VoxKey &k, const PointXYZ &p0, const PointXYZ &n0, const float &s0)
 	{
@@ -396,11 +417,11 @@ public:
     {
         // Update only count for optional removal count of points and centroid of the cell
         counts[idx] += 1;
-        if (scores[idx] == -1.0 && s0 > scores[idx])
-        {
-            scores[idx] = s0;
-            normals[idx] = n0;
-        }
+//        if (scores[idx] == -1.0 && s0 > scores[idx])
+//        {
+//            scores[idx] = s0;
+//            normals[idx] = n0;
+//        }
         ground_scores[idx] += (double)f0;
     }
 

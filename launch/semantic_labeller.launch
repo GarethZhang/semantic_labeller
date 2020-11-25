@@ -23,8 +23,9 @@
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v4/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v5/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v6/"/>-->
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v7/"/>
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v7/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session_updated/"/>-->
+  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_2_velodyne_session/"/>
 
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated/"/>-->
@@ -39,17 +40,20 @@
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session_updated/"/>-->
 
-  <arg name="frames_to_skip" default="0"/>
+  <arg name="frames_to_skip" default="30"/>
   <arg name="map_dl" default="0.15"/>
 
   <arg name="max_distance" default="1.0"/>
   <arg name="point_distance_thresh" default="1.0"/>
 
   <!--  pointmap params for saving out point cloud-->
-  <arg name="save_velo" default="false"/> <!--  save velodyne frames in Frame velodyne-->
-  <arg name="save_velo_to_map" default="false"/> <!--  save transformation from Frame velodyne to Frame map-->
+  <arg name="save_velo" default="true"/> <!--  save velodyne frames in Frame velodyne-->
+  <arg name="save_velo_to_map" default="true"/> <!--  save transformation from Frame velodyne to Frame map-->
   <arg name="save_pointmap" default="false"/> <!--  save pointmap map-->
-  <arg name="save_buffer" default="true"/> <!--  save buffer that is an aggregate of velodyne frames-->
+  <arg name="save_buffer" default="false"/> <!--  save buffer that is an aggregate of velodyne frames-->
+  <arg name="save_every_npoints" default="5000000"/> <!--  save buffer that is an aggregate of velodyne frames-->
+
+  <arg name="last_frame_tsec" default="1564180604.0"/>
 
   <!--  submap point cloud pre-processing params-->
   <arg name="lidar_n_lines" default="128"/>
@@ -99,6 +103,9 @@
     <param name="save_velo_to_map" type="bool" value="$(arg save_velo_to_map)"/>
     <param name="save_pointmap" type="bool" value="$(arg save_pointmap)"/>
     <param name="save_buffer" type="bool" value="$(arg save_buffer)"/>
+    <param name="save_every_npoints" type="double" value="$(arg save_every_npoints)"/>
+
+    <param name="last_frame_tsec" type="double" value="$(arg last_frame_tsec)"/>
 
     <param name="lidar_n_lines" type="int" value="$(arg lidar_n_lines)"/>
     <param name="r_scale" type="double" value="$(arg r_scale)"/>

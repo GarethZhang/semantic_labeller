@@ -1905,6 +1905,11 @@ public:
     }
   }
 
+  void clear(){
+      treeIndex.clear();
+      index.clear();
+  }
+
   /** Remove a point from the set (Lazy Deletion) */
   void removePoint(size_t idx) {
     if (idx >= pointCount)

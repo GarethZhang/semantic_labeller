@@ -79,7 +79,7 @@ private:
     std::string save_dir;
     std::string submap_frame, submap_topic, velodyne_frame, velodyne_topic, slamMap_frame, slamMap_topic;
     bool save_to_ply, save_velo, save_velo_to_map, save_pointmap, save_buffer, show_debug_msg;
-    double max_distance, r_scale, h_scale, frame_voxel_size, point_distance_thresh;
+    double max_distance, r_scale, h_scale, frame_voxel_size, point_distance_thresh, last_frame_tsec, save_every_npoints;
     float alpha, tolerance, Tm, Tm_small, Tb, Trmse, Tdprev, abs_z, map_dl, bin_size_small, bin_size_large, rmin, rmax;
     int lidar_n_lines, frames_to_skip, num_bins_small, num_bins_large, cur_frame = 0;
 
