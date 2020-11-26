@@ -302,13 +302,14 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             //////////////////////////////////////////
 
             vector<bool> ground_flag(velo.size(), false);
-//            extract_ground_himmelsbach(velo, ground_flag);
-//            int ground_count = 0;
-//            for (int i = 0; i < ground_flag.size(); ++i) {
-//                if (ground_flag[i]) {
-//                    ground_count++;
-//                }
-//            }
+            extract_ground_himmelsbach(velo, ground_flag);
+            int ground_count = 0;
+
+            for (auto && i : ground_flag) {
+                if (i) {
+                    ground_count++;
+                }
+            }
 
 //            // Publish ros messages
 //            moveToPCLPtr(velo, latent_publish, ground_flag, false);
@@ -336,6 +337,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             velo_transformed_mat = (R_init * velo_mat).colwise() + T_init;
 
             filter_pointcloud(velo_transformed, keep_index, 0.5);
+            filter_by_value(ground_flag, keep_index, 0.5);
 
             t.push_back(std::clock());
 
@@ -393,10 +395,9 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
 
             // Update sub_ground_flag
             vector<bool> sub_ground_flag;
-            for (int i = 0; i < sub_inds.size(); ++i){
-                sub_ground_flag.push_back(ground_flag[sub_inds[i]]);
+            for (unsigned long sub_ind : sub_inds){
+                sub_ground_flag.push_back(ground_flag[sub_ind]);
             }
-            t.push_back(std::clock());
 
             /////////////////////////////
             // Save buffer point cloud //
@@ -418,7 +419,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                 if (msg->header.stamp.toSec() >= last_frame_tsec || buffer_map.cloud.pts.size() >= save_every_npoints){
                     ROS_INFO("SAVING BUFFER AND CLEARING OLD MAP");
                     save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
-                    buffer_map.clear();
+//                    buffer_map.clear();
 //                    new (&buffer_map) PointMap();
                 }
             }
@@ -457,7 +458,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                 if (msg->header.stamp.toSec() >= last_frame_tsec || map.cloud.pts.size() >= save_every_npoints){
                     ROS_INFO("SAVING CLOUD AND CLEARING OLD MAP");
                     save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
-                    map.clear();
+//                    map.clear();
 //                    new (&map) PointMap();
                 }
             }
@@ -678,7 +679,7 @@ void velodyne_listener_class::moveToPCLPtr(vector<PointXYZ> &cloud, pcl::PointCl
         PCL_cloud_ptr->clear();
     pcl::PointXYZ p;
     for (int i = 0; i < cloud.size(); ++i){
-        if (!flag[i]){
+        if (flag[i]){
             p.x = cloud[i].x;
             p.y = cloud[i].y;
             p.z = cloud[i].z;
