@@ -1906,8 +1906,9 @@ public:
   }
 
   void clear(){
-      treeIndex.clear();
-      index.clear();
+      for (size_t idx = 0; idx < treeIndex.size(); idx++){
+          treeIndex[idx] = -1;
+      }
   }
 
   /** Remove a point from the set (Lazy Deletion) */

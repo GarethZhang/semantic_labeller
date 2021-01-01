@@ -54,11 +54,11 @@ private:
     ros::NodeHandle nh_; // we will need this, to pass between "main" and constructor
 
     // some objects to support subscriber, and publisher
-//    ros::Subscriber velo_sub_; //these will be set up within the class constructor, hiding these ugly details
+    ros::Subscriber velo_sub_; //these will be set up within the class constructor, hiding these ugly details
     ros::Subscriber kf_ref_sub_; // subscribe to kf_ref topic
     ros::Subscriber slam_map_sub_; // subscribe to kf_ref topic
-    message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
-    message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
+//    message_filters::Subscriber<sensor_msgs::PointCloud2> velo_sub_; // subscribe to velodyne_points topic
+//    message_filters::TimeSequencer<sensor_msgs::PointCloud2> velo_time_seq; //time sequencer
 
     ros::Publisher map_pub_, map_ground_pub_, latent_pub_;
     sensor_msgs::PointCloud2 map_msg, map_ground_msg, latent_msg;

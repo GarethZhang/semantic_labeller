@@ -22,9 +22,9 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
     nh_(*nodehandle),
     map_publish(new pcl::PointCloud<pcl::PointXYZ>),
     map_ground_publish(new pcl::PointCloud<pcl::PointXYZ>),
-    latent_publish(new pcl::PointCloud<pcl::PointXYZ>),
-    velo_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 1000),
-    velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 1000)
+    latent_publish(new pcl::PointCloud<pcl::PointXYZ>)
+//    velo_sub_(nh_, "/lidar_keyframe_slam/velodyne_points_undistorted", 1000),
+//    velo_time_seq(velo_sub_, ros::Duration(1.0), ros::Duration(0.01), 1000)
     { // constructor
     ROS_INFO("in class constructor of velodyne_listener_class");
     getParams();
@@ -49,9 +49,10 @@ velodyne_listener_class::velodyne_listener_class(ros::NodeHandle *nodehandle) :
 // "this" keyword is required, to refer to the current instance of velodyne_listener_class
 void velodyne_listener_class::initializeSubscribers() {
     ROS_INFO("Initializing Subscribers");
-//    velo_sub_ = nh_.subscribe("/velodyne_points", 1, &velodyne_listener_class::velodyneCallback, this);
+    velo_sub_ = nh_.subscribe("/lidar_keyframe_slam/velodyne_points_undistorted", 1000,
+                              &velodyne_listener_class::velodyneCallback, this);
 //    kf_ref_sub_ = nh_.subscribe(submap_topic, 10, &velodyne_listener_class::kfRefCallback, this);
-    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
+//    velo_time_seq.registerCallback(&velodyne_listener_class::velodyneCallback, this);
 
     // add more subscribers here, as needed
 }
@@ -229,6 +230,8 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
     //////////////////////////////////////
     bool available = false;
     try {
+        velo_to_map_listener.waitForTransform(slamMap_frame, velodyne_frame,
+                                              msg->header.stamp, ros::Duration(0.1));
         velo_to_map_listener.lookupTransform(slamMap_frame, velodyne_frame,
                                              msg->header.stamp, velo_to_map_transform);
         ROS_INFO("%lu", msg->header.stamp.toNSec());
@@ -398,6 +401,7 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
             for (unsigned long sub_ind : sub_inds){
                 sub_ground_flag.push_back(ground_flag[sub_ind]);
             }
+            t.push_back(std::clock());
 
             /////////////////////////////
             // Save buffer point cloud //
@@ -416,10 +420,11 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     buffer_map_features.push_back(buffer_map.ground_scores[i] / buffer_map.counts[i]);
                 }
                 ROS_INFO("AFTER UPDATE BUFFER SIZE: %lu", buffer_map.cloud.pts.size());
-                if (msg->header.stamp.toSec() >= last_frame_tsec || buffer_map.cloud.pts.size() >= save_every_npoints){
+//                if (buffer_map.cloud.pts.size() >= save_every_npoints){
+                if (msg->header.stamp.toSec() >= last_frame_tsec){
                     ROS_INFO("SAVING BUFFER AND CLEARING OLD MAP");
                     save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
-//                    buffer_map.clear();
+                    buffer_map.clear();
 //                    new (&buffer_map) PointMap();
                 }
             }
@@ -455,11 +460,10 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     map_features.push_back(map.ground_scores[i] / map.counts[i]);
                 }
                 ROS_INFO("AFTER UPDATE MAP SIZE: %lu", map.cloud.pts.size());
-                if (msg->header.stamp.toSec() >= last_frame_tsec || map.cloud.pts.size() >= save_every_npoints){
+                if (map.cloud.pts.size() >= save_every_npoints){
                     ROS_INFO("SAVING CLOUD AND CLEARING OLD MAP");
                     save_cloud(map_save_str, map.cloud.pts, map.normals, map_features);
-//                    map.clear();
-//                    new (&map) PointMap();
+                    map.clear();
                 }
             }
             t.push_back(std::clock());

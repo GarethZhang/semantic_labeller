@@ -371,7 +371,7 @@ public:
 
 		samples.clear();
 
-//		tree.clear();
+		tree.clear();
 	}
 
 	// Init of voxel centroid
