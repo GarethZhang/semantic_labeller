@@ -8,6 +8,7 @@
 
 #include "../cloud/cloud.h"
 #include "Eigen/Geometry"
+#include "ros/ros.h"
 
 struct Line {
     float m;
