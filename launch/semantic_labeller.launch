@@ -10,37 +10,32 @@
   <arg name="velodyne_topic" default="/velodyne_points"/>
   
   <arg name="rviz" default="true"/>
-  <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/latent.rviz"/>
+  <arg name="rviz_config" default="/home/haowei/MEGA/Research/src/ros_ws/src/semantic_labeller/config/latent.rviz"/>
 
   <arg name="save_to_ply" default="false"/>
   <arg name="show_debug_msg" default="true"/>
 
   <!--  get map and buffer map .ply-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v2/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v3/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v4/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v5/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v6/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/map_session_updated_v7/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_1_map_session_v0/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session_updated/"/>-->
 <!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_2_velodyne_session/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_full_velodyne_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-02-2019/route_B_full_map_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-02-2019/route_B_full_velodyne_session_v0/"/>-->
 
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v2/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v4/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v5/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v6/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/map_session_updated_v7/"/>-->
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/route_A_1_map_session_v0/"/>
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session_updated/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/route_A_full_map_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/route_A_full_velodyne_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-09-2019/route_B_full_map_session_v0/"/>-->
+<!--   <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-09-2019/route_B_full_velodyne_session_v0/"/> -->
 
-<!--  &lt;!&ndash;  get velodyne scan .ply&ndash;&gt;-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/velodyne_session/"/>-->
-<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/velodyne_session_updated/"/>-->
+  <!--  For Boreas data, extract scan and pose in one run, and assemble map in the other run -->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-11-26-13-58/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-11-26-13-58/applanix_localization/maps/"/>-->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/scans/"/>-->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/maps/"/>-->
+  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/large_maps/"/>
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-04-14-00/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-04-14-00/applanix_localization/maps/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-08-14-01/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-08-14-01/applanix_localization/maps/"/>-->
 
   <arg name="frames_to_skip" default="30"/>
   <arg name="map_dl" default="0.15"/>
@@ -51,13 +46,13 @@
   <!--  pointmap params for saving out point cloud-->
   <arg name="save_velo" default="false"/> <!--  save velodyne frames in Frame velodyne-->
   <arg name="save_velo_to_map" default="false"/> <!--  save transformation from Frame velodyne to Frame map-->
-  <arg name="save_pointmap" default="true"/> <!--  save pointmap map-->
+  <arg name="save_pointmap" default="false"/> <!--  save pointmap map-->
   <arg name="save_buffer" default="true"/> <!--  save buffer that is an aggregate of velodyne frames-->
-  <arg name="save_every_npoints" default="10000000"/> <!--  save buffer that is an aggregate of velodyne frames-->
+  <arg name="save_every_npoints" default="5000000"/> <!--  save buffer that is an aggregate of velodyne frames-->
 
 <!--  <arg name="last_frame_tsec" default="1564180604.0"/>-->
 <!--  <arg name="last_frame_tsec" default="1564180490.0"/> &lt;!&ndash; route_A_07-26 &ndash;&gt;-->
-  <arg name="last_frame_tsec" default="1565372998.0"/> <!-- route_A_11802808-09 -->
+  <arg name="last_frame_tsec" default="1606848150.0"/> <!-- route_A_08-09 -->
 
   <!--  submap point cloud pre-processing params-->
   <arg name="lidar_n_lines" default="128"/>
