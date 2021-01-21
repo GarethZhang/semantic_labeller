@@ -165,6 +165,8 @@ target_link_libraries(pointmap cloud ${catkin_LIBRARIES})
 # The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node src/velodyne_listener.cpp)
 
+add_executable(merge_maps_node src/merge_maps.cpp)
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -184,6 +186,16 @@ add_executable(${PROJECT_NAME}_node src/velodyne_listener.cpp)
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}
  )
+
+target_link_libraries(merge_maps_node
+        grid_subsampling
+        himmelsbach
+        cloud
+        pointmap
+        polar_processing
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        )
 
 #target_link_libraries(frame_visualizer_node
 #        grid_subsampling

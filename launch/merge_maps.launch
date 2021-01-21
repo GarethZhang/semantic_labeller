@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-11-26-13-58/submaps"/>
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-01-13-26/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-04-14-00/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-08-14-01/submaps"/>-->
+  <arg name="map_dl" default="0.15"/>
+  <arg name="save_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-11-26-13-58/map"/>
+
+
+  <node pkg="semantic_labeller" type="merge_maps_node" name="merge_maps_node" output="screen">
+    <param name="map_dir" value="$(arg map_dir)" />
+    <param name="map_dl" type="double" value="$(arg map_dl)"/>
+    <param name="save_dir" value="$(arg save_dir)" />
+  </node>
+
+</launch>     
