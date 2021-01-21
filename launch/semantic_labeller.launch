@@ -4,20 +4,77 @@
   <arg name="online" default="false"/>
   <arg name="submap_frame" default="/kf_ref"/>
   <arg name="submap_topic" default="/lidar_keyframe_slam/kfRef_cloud"/>
-  <arg name="slamMap_frame" default="/map"/>
+  <arg name="slamMap_frame" default="map"/>
   <arg name="slamMap_topic" default="/lidar_keyframe_slam/slamMap_cloud"/>
-  <arg name="velodyne_frame" default="/velodyne"/>
+  <arg name="velodyne_frame" default="velodyne"/>
   <arg name="velodyne_topic" default="/velodyne_points"/>
   
   <arg name="rviz" default="true"/>
-  <arg name="rviz_config" default="/home/haowei/haowei_ws/src/semantic_labeller/config/lidar.rviz"/>
+  <arg name="rviz_config" default="/home/haowei/MEGA/Research/src/ros_ws/src/semantic_labeller/config/latent.rviz"/>
 
-  <arg name="save_to_ply" default="true"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/frame2frame/results-full-slammap-s643/"/>
+  <arg name="save_to_ply" default="false"/>
+  <arg name="show_debug_msg" default="true"/>
 
-  <arg name="max_distance" default="0.5"/>
-  <arg name="min_intensity" default="50.0"/>
-  <arg name="max_intensity" default="255.0"/>
+  <!--  get map and buffer map .ply-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_2_velodyne_session/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/07-26-2019/route_A_full_velodyne_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-02-2019/route_B_full_map_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-02-2019/route_B_full_velodyne_session_v0/"/>-->
+
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/route_A_full_map_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_A/08-09-2019/route_A_full_velodyne_session_v0/"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-09-2019/route_B_full_map_session_v0/"/>-->
+<!--   <arg name="save_dir" default="/home/haowei/Documents/data/route_B/08-09-2019/route_B_full_velodyne_session_v0/"/> -->
+
+  <!--  For Boreas data, extract scan and pose in one run, and assemble map in the other run -->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-11-26-13-58/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-11-26-13-58/applanix_localization/maps/"/>-->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/scans/"/>-->
+<!--   <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/maps/"/>-->
+  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-01-13-26/applanix_localization/large_maps/"/>
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-04-14-00/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-04-14-00/applanix_localization/maps/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-08-14-01/applanix_localization/scans/"/>-->
+<!--  <arg name="save_dir" default="/mnt/hdd2/Boreas/boreas-2020-12-08-14-01/applanix_localization/maps/"/>-->
+
+  <arg name="frames_to_skip" default="30"/>
+  <arg name="map_dl" default="0.15"/>
+
+  <arg name="max_distance" default="1.0"/>
+  <arg name="point_distance_thresh" default="1.0"/>
+
+  <!--  pointmap params for saving out point cloud-->
+  <arg name="save_velo" default="false"/> <!--  save velodyne frames in Frame velodyne-->
+  <arg name="save_velo_to_map" default="false"/> <!--  save transformation from Frame velodyne to Frame map-->
+  <arg name="save_pointmap" default="false"/> <!--  save pointmap map-->
+  <arg name="save_buffer" default="true"/> <!--  save buffer that is an aggregate of velodyne frames-->
+  <arg name="save_every_npoints" default="5000000"/> <!--  save buffer that is an aggregate of velodyne frames-->
+
+<!--  <arg name="last_frame_tsec" default="1564180604.0"/>-->
+<!--  <arg name="last_frame_tsec" default="1564180490.0"/> &lt;!&ndash; route_A_07-26 &ndash;&gt;-->
+  <arg name="last_frame_tsec" default="1606848150.0"/> <!-- route_A_08-09 -->
+
+  <!--  submap point cloud pre-processing params-->
+  <arg name="lidar_n_lines" default="128"/>
+  <arg name="r_scale" default="4.0"/>
+  <arg name="h_scale" default="0.5"/>
+  <arg name="frame_voxel_size" default="0.3"/>
+
+  <arg name="alpha" default="0.0873"/> <!--  Number of segments = (2 * M_PI) / alpha-->
+  <arg name="tolerance" default="0.25"/> <!--  Metric distance from the ground plane to be considered a ground point-->
+  <arg name="Tm" default="0.18"/> <!--  Slopes greater than this value will be considered non-ground-->
+  <arg name="Tm_small" default="0.0873"/> <!--  Slopes less than this value will be checked for being a plateau-->
+  <arg name="Tb" default="100.0"/> <!--  Flat regions that are higher than this will be considered non-ground-->
+  <arg name="Trmse" default="0.05"/> <!--  If the RSME of the line fit exceeds this value, it will be rejected-->
+  <arg name="Tdprev" default="0.2"/> <!--  Maximum allowed distance between previous line and start of new line-->
+  <arg name="abs_z" default="-1.0"/> <!--  absolute z-axis threshold on point to be considered part of ground-->
+
+  <arg name="num_bins_small" default="120"/>
+  <arg name="num_bins_large" default="54"/>
+  <arg name="bin_size_small" default="0.1"/>
+  <arg name="bin_size_large" default="2.0"/>
+  <arg name="rmin" default="2.5"/>
+  <arg name="rmax" default="119.5"/>
 
   <!-- always make sure we are not using simulation time when running online-->
   <param unless="$(arg online)" name="/use_sim_time" value="true"/>
@@ -35,10 +92,42 @@
     <param name="velodyne_frame" value="$(arg velodyne_frame)"/>
     <param name="velodyne_topic" value="$(arg velodyne_topic)"/>
 
-    <param name="max_distance" type="double" value="$(arg max_distance)"/>
-    <param name="min_intensity" type="double" value="$(arg min_intensity)"/>
-    <param name="max_intensity" type="double" value="$(arg max_intensity)"/>
+    <param name="frames_to_skip" type="int" value="$(arg frames_to_skip)"/>
+    <param name="map_dl" type="double" value="$(arg map_dl)"/>
 
+    <param name="max_distance" type="double" value="$(arg max_distance)"/>
+    <param name="point_distance_thresh" type="double" value="$(arg point_distance_thresh)"/>
+
+    <param name="save_velo" type="bool" value="$(arg save_velo)"/>
+    <param name="save_velo_to_map" type="bool" value="$(arg save_velo_to_map)"/>
+    <param name="save_pointmap" type="bool" value="$(arg save_pointmap)"/>
+    <param name="save_buffer" type="bool" value="$(arg save_buffer)"/>
+    <param name="save_every_npoints" type="double" value="$(arg save_every_npoints)"/>
+
+    <param name="last_frame_tsec" type="double" value="$(arg last_frame_tsec)"/>
+
+    <param name="lidar_n_lines" type="int" value="$(arg lidar_n_lines)"/>
+    <param name="r_scale" type="double" value="$(arg r_scale)"/>
+    <param name="h_scale" type="double" value="$(arg h_scale)"/>
+    <param name="frame_voxel_size" type="double" value="$(arg frame_voxel_size)"/>
+
+    <param name="alpha" type="double" value="$(arg alpha)"/>
+    <param name="tolerance" type="double" value="$(arg tolerance)"/>
+    <param name="Tm" type="double" value="$(arg Tm)"/>
+    <param name="Tm_small" type="double" value="$(arg Tm_small)"/>
+    <param name="Tb" type="double" value="$(arg Tb)"/>
+    <param name="Trmse" type="double" value="$(arg Trmse)"/>
+    <param name="Tdprev" type="double" value="$(arg Tdprev)"/>
+    <param name="abs_z" type="double" value="$(arg abs_z)"/>
+
+    <param name="num_bins_small" type="double" value="$(arg num_bins_small)"/>
+    <param name="num_bins_large" type="double" value="$(arg num_bins_large)"/>
+    <param name="bin_size_small" type="double" value="$(arg bin_size_small)"/>
+    <param name="bin_size_large" type="double" value="$(arg bin_size_large)"/>
+    <param name="rmin" type="double" value="$(arg rmin)"/>
+    <param name="rmax" type="double" value="$(arg rmax)"/>
+
+    <param name="show_debug_msg" value="$(arg show_debug_msg)"/>
     <param name="save_to_ply" value="$(arg save_to_ply)"/>
     <param name="save_dir" value="$(arg save_dir)" />
   </node>

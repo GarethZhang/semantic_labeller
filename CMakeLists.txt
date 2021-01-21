@@ -8,14 +8,15 @@ project(semantic_labeller)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  pcl_ros
   roscpp
-  sensor_msgs
+  rospy
   std_msgs
   tf
-  velodyne_msgs
+  tf_conversions
   pcl_conversions
-  pcl_ros
   message_filters
+  eigen_conversions
 )
 
 find_package(PCL 1.3 REQUIRED COMPONENTS)
@@ -109,13 +110,17 @@ find_package(PCL 1.3 REQUIRED COMPONENTS)
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
+#catkin_package(
+##  INCLUDE_DIRS include
+##  LIBRARIES semantic_labeller
+##  CATKIN_DEPENDS roscpp sensor_msgs std_msgs tf velodyne_msgs
+##  DEPENDS system_lib
+#)
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES semantic_labeller
-#  CATKIN_DEPENDS roscpp sensor_msgs std_msgs tf velodyne_msgs
-#  DEPENDS system_lib
+        DEPENDS pcl_ros roscpp rospy std_msgs rosbag sensor_msgs pcl_conversions geometry_msgs
+        tf tf_conversions message_filters eigen_conversions
+        INCLUDE_DIRS include
 )
-
 ###########
 ## Build ##
 ###########
@@ -128,10 +133,27 @@ include_directories(
   ${PCL_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/semantic_labeller.cpp
-# )
+# Declare a C++ library
+add_library(npm_ply_in src/npm_ply/ply_file_in.cc)
+target_link_libraries(npm_ply_in ${catkin_LIBRARIES})
+
+add_library(npm_ply_out src/npm_ply/ply_file_out.cc)
+target_link_libraries(npm_ply_out ${catkin_LIBRARIES})
+
+add_library(cloud src/cloud/cloud.cpp)
+target_link_libraries(cloud npm_ply_in npm_ply_out ${catkin_LIBRARIES})
+
+add_library(grid_subsampling src/grid_subsampling/grid_subsampling.cpp)
+target_link_libraries(grid_subsampling cloud ${catkin_LIBRARIES})
+
+add_library(himmelsbach src/himmelsbach/himmelsbach.cpp)
+target_link_libraries(himmelsbach cloud ${catkin_LIBRARIES})
+
+add_library(polar_processing src/polar_processing/polar_processing.cpp)
+target_link_libraries(polar_processing cloud ${catkin_LIBRARIES})
+
+add_library(pointmap src/pointmap/pointmap.cpp)
+target_link_libraries(pointmap cloud ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -141,7 +163,9 @@ include_directories(
 # Declare a C++ executable
 # With catkin_make all packages are built within a single CMake context
 # The recommended prefix ensures that target names across packages don't collide
- add_executable(${PROJECT_NAME}_node src/velodyne_listener.cpp)
+add_executable(${PROJECT_NAME}_node src/velodyne_listener.cpp)
+
+add_executable(merge_maps_node src/merge_maps.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -154,9 +178,34 @@ include_directories(
 
 # Specify libraries to link a library or executable target against
  target_link_libraries(${PROJECT_NAME}_node
+   grid_subsampling
+   himmelsbach
+   cloud
+   pointmap
+   polar_processing
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}
  )
+
+target_link_libraries(merge_maps_node
+        grid_subsampling
+        himmelsbach
+        cloud
+        pointmap
+        polar_processing
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        )
+
+#target_link_libraries(frame_visualizer_node
+#        grid_subsampling
+#        himmelsbach
+#        cloud
+#        pointmap
+#        polar_processing
+#        ${catkin_LIBRARIES}
+#        ${PCL_LIBRARIES}
+#        )
 
 #############
 ## Install ##
