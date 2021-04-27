@@ -119,7 +119,8 @@ find_package(PCL 1.3 REQUIRED COMPONENTS)
 catkin_package(
         DEPENDS pcl_ros roscpp rospy std_msgs rosbag sensor_msgs pcl_conversions geometry_msgs
         tf tf_conversions message_filters eigen_conversions
-        INCLUDE_DIRS include
+        INCLUDE_DIRS include # allow other package to find headers when use this package
+        LIBRARIES npm_ply_in npm_ply_out cloud
 )
 ###########
 ## Build ##
@@ -134,25 +135,25 @@ include_directories(
 )
 
 # Declare a C++ library
-add_library(npm_ply_in src/npm_ply/ply_file_in.cc)
+add_library(npm_ply_in include/semantic_labeller/npm_ply/ply_file_in.cc)
 target_link_libraries(npm_ply_in ${catkin_LIBRARIES})
 
-add_library(npm_ply_out src/npm_ply/ply_file_out.cc)
+add_library(npm_ply_out include/semantic_labeller/npm_ply/ply_file_out.cc)
 target_link_libraries(npm_ply_out ${catkin_LIBRARIES})
 
-add_library(cloud src/cloud/cloud.cpp)
+add_library(cloud include/semantic_labeller/cloud/cloud.cpp)
 target_link_libraries(cloud npm_ply_in npm_ply_out ${catkin_LIBRARIES})
 
-add_library(grid_subsampling src/grid_subsampling/grid_subsampling.cpp)
+add_library(grid_subsampling include/semantic_labeller/grid_subsampling/grid_subsampling.cpp)
 target_link_libraries(grid_subsampling cloud ${catkin_LIBRARIES})
 
-add_library(himmelsbach src/himmelsbach/himmelsbach.cpp)
+add_library(himmelsbach include/semantic_labeller/himmelsbach/himmelsbach.cpp)
 target_link_libraries(himmelsbach cloud ${catkin_LIBRARIES})
 
-add_library(polar_processing src/polar_processing/polar_processing.cpp)
+add_library(polar_processing include/semantic_labeller/polar_processing/polar_processing.cpp)
 target_link_libraries(polar_processing cloud ${catkin_LIBRARIES})
 
-add_library(pointmap src/pointmap/pointmap.cpp)
+add_library(pointmap include/semantic_labeller/pointmap/pointmap.cpp)
 target_link_libraries(pointmap cloud ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the library
@@ -227,20 +228,20 @@ target_link_libraries(merge_maps_node
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
 
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
+# Mark libraries for installation
+# See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
+ install(TARGETS npm_ply_in npm_ply_out cloud
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+ )
 
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+# Mark cpp header files for installation
+ install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+   FILES_MATCHING PATTERN "*.h"
+   PATTERN ".svn" EXCLUDE
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

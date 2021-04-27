@@ -8,7 +8,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#include "../../include/nanoflann/nanoflann.hpp"
+#include "nanoflann/nanoflann.hpp"
 #include <Eigen/Eigenvalues>
 
 #include "../cloud/cloud.h"

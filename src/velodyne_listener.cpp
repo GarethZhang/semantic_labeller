@@ -420,8 +420,8 @@ void velodyne_listener_class::velodyneCallback(const sensor_msgs::PointCloud2::C
                     buffer_map_features.push_back(buffer_map.ground_scores[i] / buffer_map.counts[i]);
                 }
                 ROS_INFO("AFTER UPDATE BUFFER SIZE: %lu", buffer_map.cloud.pts.size());
-//                if (buffer_map.cloud.pts.size() >= save_every_npoints){
-                if (msg->header.stamp.toSec() >= last_frame_tsec){
+                if (buffer_map.cloud.pts.size() >= save_every_npoints){
+//                if (msg->header.stamp.toSec() >= last_frame_tsec){
                     ROS_INFO("SAVING BUFFER AND CLEARING OLD MAP");
                     save_cloud(buffer_map_save_str, buffer_map.cloud.pts, buffer_map.normals, buffer_map_features);
                     buffer_map.clear();

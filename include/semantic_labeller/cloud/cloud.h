@@ -34,9 +34,9 @@
 
 #include <time.h>
 
-#include "../npm_ply/ply_types.h"
-#include "../npm_ply/ply_file_in.h"
-#include "../npm_ply/ply_file_out.h"
+#include "semantic_labeller/npm_ply/ply_types.h"
+#include "semantic_labeller/npm_ply/ply_file_in.h"
+#include "semantic_labeller/npm_ply/ply_file_out.h"
 
 //------------------------------------------------------------------------------------------------------------
 // Point class

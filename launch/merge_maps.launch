@@ -1,11 +1,16 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-11-26-13-58/submaps"/>
-<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-01-13-26/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-11-26-13-58/submaps"/>-->
+  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-01-13-26/applanix_localization/submaps"/>
 <!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-04-14-00/submaps"/>-->
 <!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-08-14-01/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-18-13-44/applanix_localization/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/boreas-2021-01-12-14-33/applanix_localization/submaps"/>-->
+<!--  <arg name="map_dir" default="/home/haowei/Documents/data/boreas/2021-02-02-night/applanix_localization/submaps"/>-->
   <arg name="map_dl" default="0.15"/>
-  <arg name="save_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-11-26-13-58/map"/>
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/boreas/boreas-2021-01-12-14-33/applanix_localization/map"/>-->
+<!--  <arg name="save_dir" default="/home/haowei/Documents/data/boreas/2021-02-02-night/applanix_localization/map"/>-->
+  <arg name="save_dir" default="/home/haowei/Documents/data/boreas/boreas-2020-12-01-13-26/applanix_localization/map"/>
 
 
   <node pkg="semantic_labeller" type="merge_maps_node" name="merge_maps_node" output="screen">

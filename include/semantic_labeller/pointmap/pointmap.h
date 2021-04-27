@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <limits>
 
-#include "../../include/nanoflann/nanoflann.hpp"
+#include "nanoflann/nanoflann.hpp"
 
 using namespace std;
 

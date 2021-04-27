@@ -18,10 +18,10 @@
 #include <numeric>
 #include <chrono>
 
-#include "grid_subsampling/grid_subsampling.h"
-#include "himmelsbach/himmelsbach.h"
-#include "pointmap/pointmap.h"
-#include "polar_processing/polar_processing.h"
+#include "semantic_labeller/grid_subsampling/grid_subsampling.h"
+#include "semantic_labeller/himmelsbach/himmelsbach.h"
+#include "semantic_labeller/pointmap/pointmap.h"
+#include "semantic_labeller/polar_processing/polar_processing.h"
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
